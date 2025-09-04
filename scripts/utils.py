@@ -62,7 +62,7 @@ def get_imagenet_dm_conf(
     return model, diffusion
 
 
-def label_to_str(label,real=0):
+def label_to_str(label, real=0):
     if label == real:
         s = "real"
     else:

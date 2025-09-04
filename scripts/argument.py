@@ -18,7 +18,7 @@ def parser():
 
     parser.add_argument(
         "--todo",
-        choices=["train","test" , "degrade", "get_imgs"],
+        choices=["train", "test", "degrade", "get_imgs"],
         default="train",
         help="train|test|degrade|get_imgs",
     )
@@ -32,7 +32,7 @@ def parser():
     parser.add_argument("--epoches", type=int, default=10)
     parser.add_argument("--adv_test", default=False, action="store_true")
     parser.add_argument("--not_shuffle", default=False, action="store_true")
-    parser.add_argument("--save_each_epoch", type=int, default=5)
+    parser.add_argument("--save_each_epoch", type=int, default=1)
     parser.add_argument("--save_path", default="test")
     parser.add_argument("--lr", type=float, default=5e-5)
     parser.add_argument("--batch_size", type=int, default=64)
@@ -55,12 +55,17 @@ def parser():
     parser.add_argument("--each_class_num", type=int, default=0)
 
     parser.add_argument("--adv", default=False, action="store_true")
-    parser.add_argument("--adv_mode", type=int, default=0)             #0:normal 1:Manually implemented 2:autoattack
+    parser.add_argument(
+        "--adv_mode", type=int, default=0
+    )  # 0:normal 1:Manually implemented 2:autoattack 3:DDN 4:CW 5:quareAttack l2 6:quareAttack linf
+    parser.add_argument("--CW_c", type=float, default=0.0001)  # CW攻击的强度系数
+
+
     parser.add_argument("--diff_denoise", default=False, action="store_true")
     parser.add_argument("--diff_denoise_test", default=False, action="store_true")
     # parser.add_argument("--denoise_train_beta", type = float, default = 1.0)
     parser.add_argument("--diff_denoise_t", type=int, default=2)
-    parser.add_argument("--atk_eps", type=str_to_float, default=8 / 255) #bound
+    parser.add_argument("--atk_eps", type=str_to_float, default=8 / 255)  # bound
     parser.add_argument("--atk_alpha", type=str_to_float, default=2 / 255)
     parser.add_argument("--atk_steps", type=int, default=10)
     parser.add_argument("--update_adv_each_epoch", type=int, default=100)
@@ -71,7 +76,7 @@ def parser():
     parser.add_argument("--MART_alpha", type=float, default=0.2)
     parser.add_argument("--MART_beta", type=float, default=6.0)
     parser.add_argument("--normal_adv", default=False, action="store_true")
- 
+
     parser.add_argument(
         "--save_denoise_pic_training", default=False, action="store_true"
     )
@@ -111,6 +116,8 @@ def parser():
 
     parser.add_argument("--ratio_list", type=float, nargs="+", default=None)
     parser.add_argument("--validation_split", type=float, default=0.2)
+
+    parser.add_argument("--val_rate", type=float, default=1.0)
 
     # parser.add_argument("--log_path", default="log/training.log") #改成自动的了
 

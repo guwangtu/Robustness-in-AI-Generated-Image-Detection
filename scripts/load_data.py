@@ -27,7 +27,7 @@ type_map = {
     "genimage": 1,
     "imagenet": 0,
     "fold": 2,
-    "n":2,
+    "n": 2,
 }  # 0真1假2混合
 
 
@@ -42,7 +42,7 @@ class MyDataset(Dataset):
 
     def __getitem__(self, idx):
         image_path = self.image_paths[idx]
-        label = self.labels[idx] 
+        label = self.labels[idx]
         try:
             image = Image.open(image_path).convert("RGB")
         except OSError as e:
@@ -51,30 +51,40 @@ class MyDataset(Dataset):
             image = self.transform(image)
 
         return image, label
-    
-    def copy_img(self,save_path,real_label=0):
-        if real_label==0:
-            dic={0:'real',1:'fake'}
+
+    def copy_img(self, save_path, real_label=0):
+        if real_label == 0:
+            dic = {0: "real", 1: "fake"}
         else:
-            dic={1:'real',0:'fake'}
-        os.makedirs(save_path+'/real', exist_ok=True)
-        os.makedirs(save_path+'/fake', exist_ok=True)
+            dic = {1: "real", 0: "fake"}
+        os.makedirs(save_path + "/real", exist_ok=True)
+        os.makedirs(save_path + "/fake", exist_ok=True)
         for i in tqdm(range(len(self.image_paths))):
-            label=dic[self.labels[i]] 
-            img_path=self.image_paths[i]
-            new_name=label+'_'+str(i)+'.'+img_path.split('.')[-1]
-            new_file_path=save_path+'/'+label+'/'+new_name
-            shutil.copy(img_path,new_file_path)
- 
+            label = dic[self.labels[i]]
+            img_path = self.image_paths[i]
+            new_name = label + "_" + str(i) + "." + img_path.split(".")[-1]
+            new_file_path = save_path + "/" + label + "/" + new_name
+            shutil.copy(img_path, new_file_path)
+
+    def shrink_dataset(self, ratio):
+        if not 0 <= ratio <= 1:
+            raise ValueError("Ratio must be between 0 and 1.")
+
+        new_size = int(len(self.image_paths) * ratio)
+        indices = random.sample(range(len(self.image_paths)), new_size)
+
+        self.image_paths = [self.image_paths[i] for i in indices]
+        self.labels = [self.labels[i] for i in indices]
+
 
 def load_image_fold(path, label, transform, validation_split=0.2):
     imgs = []
-    #print(path)
+    # print(path)
     for root, dirs, files in os.walk(path):
         for file in files:
             if file.endswith(image_end):
                 imgs.append(os.path.join(root, file))
-    #print('imagenum '+str(len(imgs)))
+    # print('imagenum '+str(len(imgs)))
     return spilt_dataset(
         MyDataset(imgs, [label] * len(imgs), transform), validation_split
     )
@@ -103,13 +113,13 @@ def load_artifact(path, *args, **kwargs):  # real 0
         "lsun",
         "metfaces",
     ]
-    special = ["cyclegan",'pro_gan']
+    special = ["cyclegan", "pro_gan"]
     datasets = []
-    base_path='/data_nas/users/shx/datasets/Artifact'
-    '''if path==base_path:
+    base_path = "/data_nas/users/shx/datasets/Artifact"
+    """if path==base_path:
         mode=0
     else:
-        mode=1'''
+        mode=1"""
     for file in os.listdir(base_path):
         df = pd.read_csv(base_path + "/" + file + "/metadata.csv")
         image_paths = [
@@ -131,11 +141,11 @@ def load_artifact(path, *args, **kwargs):  # real 0
 
 def load_diffusion_forensics(path, *args, **kwargs):  # 0真1假
     try:
-        train_transform=kwargs["train_transform"]
-        val_transform=kwargs["val_transform"]
+        train_transform = kwargs["train_transform"]
+        val_transform = kwargs["val_transform"]
     except:
-        train_transform=kwargs.get("transform", None)
-        val_transform=kwargs.get("transform", None)
+        train_transform = kwargs.get("transform", None)
+        val_transform = kwargs.get("transform", None)
 
     train_dataset_path = path + "/train"
     train_dataset = load_diffusion_forensics_Dataset(
@@ -179,22 +189,22 @@ def load_GenImage(GenImage_path, *args, **kwargs):  # real 0
     return ConcatDataset(train_datasets), ConcatDataset(val_datasets)
 
 
-def load_fold(path, *args, **kwargs):  # 0真1假 
-    #标准化数据集格式biaozhun
-    #-fold
-    #--train
-    #---real
-    #---fake 
+def load_fold(path, *args, **kwargs):  # 0真1假
+    # 标准化数据集格式biaozhun
+    # -fold
+    # --train
+    # ---real
+    # ---fake
     train_path = path + "/train"
     test_path = path + "/test"
     if not os.path.exists(test_path):
-        test_path= path + "/val"
+        test_path = path + "/val"
     try:
-        train_transform=kwargs["train_transform"]
-        val_transform=kwargs["val_transform"]
+        train_transform = kwargs["train_transform"]
+        val_transform = kwargs["val_transform"]
     except:
-        train_transform=kwargs.get("transform", None)
-        val_transform=kwargs.get("transform", None)
+        train_transform = kwargs.get("transform", None)
+        val_transform = kwargs.get("transform", None)
     train_dataset = load_single_dataset(train_path, train_transform)
     val_dataset = load_single_dataset(test_path, val_transform)
     return train_dataset, val_dataset
@@ -205,7 +215,7 @@ load_function_map = {
     "artifact": load_artifact,
     "df": load_diffusion_forensics,
     "fold": load_fold,
-    "n":load_fold,
+    "n": load_fold,
     "default": load_image_fold,
 }
 
@@ -220,14 +230,14 @@ def spilt_dataset(dataset, validation_split=0.2):  #  共用transform
     train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
     train_indices = train_dataset.indices
     val_indices = val_dataset.indices
- 
+
     image_paths = [dataset.image_paths[idx] for idx in train_indices]
     labels = [dataset.labels[idx] for idx in train_indices]
-    train_dataset = MyDataset(image_paths,labels,transform=dataset.transform)
+    train_dataset = MyDataset(image_paths, labels, transform=dataset.transform)
 
     image_paths = [dataset.image_paths[idx] for idx in val_indices]
     labels = [dataset.labels[idx] for idx in train_indices]
-    val_dataset = MyDataset(image_paths,labels,transform=dataset.transform)
+    val_dataset = MyDataset(image_paths, labels, transform=dataset.transform)
 
     return train_dataset, val_dataset
 
@@ -266,7 +276,12 @@ def balance_data(data_list, ratio_list=None):  # todo dataset 版
 
 
 def load_datasets(
-    data_paths, data_types, train_transform=None, validation_split=0.2, ratio_list=None,concat=True
+    data_paths,
+    data_types,
+    train_transform=None,
+    validation_split=0.2,
+    ratio_list=None,
+    concat=True,
 ):
     train_datasets = []
     val_datasets = []
@@ -274,8 +289,8 @@ def load_datasets(
     for i in range(len(data_paths)):
         this_path = data_paths[i]
         this_type = data_types[i]
-        print("loading "+this_type)
-        print('using '+get_load_function(this_type).__name__)
+        print("loading " + this_type)
+        print("using " + get_load_function(this_type).__name__)
         train_dataset, val_dataset = get_load_function(this_type)(
             path=this_path,
             label=type_map[this_type],
@@ -284,13 +299,20 @@ def load_datasets(
         )
         train_datasets.append(train_dataset)
         val_datasets.append(val_dataset)
-        print("dataset_size:"+str(len(train_dataset))+' + '+str(len(val_dataset))+' = '+str(len(train_dataset)+len(val_dataset)))
+        print(
+            "dataset_size:"
+            + str(len(train_dataset))
+            + " + "
+            + str(len(val_dataset))
+            + " = "
+            + str(len(train_dataset) + len(val_dataset))
+        )
     # bd = balance_data(data_list,ratio_list)
     if concat:
         return ConcatDataset(train_datasets), ConcatDataset(val_datasets)
     else:
-        return train_datasets,val_datasets
-    
+        return train_datasets, val_datasets
+
 
 def load_data_2_path(
     real_path, fake_path, train_transform, val_transform, each_class_num=0
@@ -312,6 +334,7 @@ def load_data_2_path(
 
     return spilt_dataset(raw_data)
 
+
 def load_images(path):
     imgs = []
     for root, dirs, files in os.walk(path):
@@ -319,6 +342,7 @@ def load_images(path):
             if file.endswith(image_end):
                 imgs.append(os.path.join(root, file))
     return imgs
+
 
 def load_single_dataset(path, transform=None):  # 0真1假
     file_real_list = ["real", "nature"]
@@ -419,19 +443,21 @@ def load_diffusion_forensics_Dataset(path, transform):
         datasets.append(load_single_dataset(file_path, transform))
     return ConcatDataset(datasets)
 
+
 def ConcatDataset(datasets):
-    if len(datasets)==0:
+    if len(datasets) == 0:
         return None
     combined_image_paths = []
     combined_labels = []
 
-    transform=None
+    transform = None
     for dataset in datasets:
-        if dataset == None:continue
-        transform=dataset.transform
+        if dataset == None:
+            continue
+        transform = dataset.transform
         combined_image_paths.extend(dataset.image_paths)
         combined_labels.extend(dataset.labels)
 
-    # 创建一个新的 MyDataset 实例 
+    # 创建一个新的 MyDataset 实例
     combined_dataset = MyDataset(combined_image_paths, combined_labels, transform)
     return combined_dataset

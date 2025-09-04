@@ -6,7 +6,13 @@ import torchvision
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
-from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import (
+    confusion_matrix,
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+)
 
 import os
 import sys
@@ -31,7 +37,7 @@ from scripts.load_data import (
 from scripts.loss import trades_loss, mart_loss, diff_denoise_loss
 from scripts.utils import get_imagenet_dm_conf, label_to_str, get_crt_num
 from scripts.diff_denoise import purify
- 
+
 
 class Trainer:
     def __init__(self, args, atk):
@@ -175,7 +181,9 @@ class Trainer:
         batch_count = 0
         losses = []
         acc = []
-        for i, (image, label) in tqdm(enumerate(self.train_loader), total=len(self.train_loader)):
+        for i, (image, label) in tqdm(
+            enumerate(self.train_loader), total=len(self.train_loader)
+        ):
             image = image.to(device)
             label = label.to(device)
             if self.train_loader2:
@@ -193,7 +201,7 @@ class Trainer:
             optimizer.zero_grad()
             target = model(image)
             loss = criterion(target, label)
-            #loss=0
+            # loss=0
             if adv_train:
                 adv_image = self.get_adv_imgs(
                     model,
@@ -243,7 +251,6 @@ class Trainer:
 
                 adv_corrects += adv_correct_num
 
- 
             loss.backward()
             optimizer.step()
             batch_count += 1
@@ -254,18 +261,34 @@ class Trainer:
             losses.append(loss.item())
             if not args.test_each_batch == 0:
                 if (i + 1) % args.test_each_batch == 0:
-                    #this_acc = np.sum(pred_label == true_label) / pred_label.shape[0]
+                    # this_acc = np.sum(pred_label == true_label) / pred_label.shape[0]
                     test_loss, Scores = self.evaluate_step(
-                        model, self.val_loader, criterion, adv_test=False,log_str=f"Batch_id:{i}",logger_index=0
-                    ) 
+                        model,
+                        self.val_loader,
+                        criterion,
+                        adv_test=False,
+                        log_str=f"Batch_id:{i}",
+                        logger_index=0,
+                    )
                     if args.adv or args.adv_test:
 
                         test_loss, Scores = self.evaluate_step(
-                            model, self.val_loader, criterion, adv_test=True,log_str=f"Batch_id:{i}  adv",logger_index=0
-                        ) 
+                            model,
+                            self.val_loader,
+                            criterion,
+                            adv_test=True,
+                            log_str=f"Batch_id:{i}  adv",
+                            logger_index=0,
+                        )
                         if args.diff_denoise:
-                            test_loss,Scores = self.evaluate_step(
-                                model,self.val_loader,criterion,adv_test=True,diff_denoise=True,log_str=f"Batch_id:{i}  adv_diff_denoise",logger_index=0
+                            test_loss, Scores = self.evaluate_step(
+                                model,
+                                self.val_loader,
+                                criterion,
+                                adv_test=True,
+                                diff_denoise=True,
+                                log_str=f"Batch_id:{i}  adv_diff_denoise",
+                                logger_index=0,
                             )
                     model.train()
             # np.save("batch_losses.npy",np.array(losses))
@@ -277,29 +300,53 @@ class Trainer:
             acc,
             losses,
         )
- 
+
     def evaluate(self, model, adv_test=False):
         criterion = torch.nn.CrossEntropyLoss()
+
         args = self.args
-        '''test_loss, Scores = self.evaluate_step(
+        """test_loss, Scores = self.evaluate_step(
             model, self.val_loader, criterion, adv_test=False,log_str="val",logger_index=1
-        ) '''
-        if adv_test: 
+        ) """
+        if adv_test:
             if args.diff_denoise or args.diff_denoise_test:
-                test_loss,Scores = self.evaluate_step(
-                    model, self.val_loader, criterion, adv_test=True, diff_denoise=True,log_str="adv_dinoise",logger_index=2
-                ) 
+                test_loss, Scores = self.evaluate_step(
+                    model,
+                    self.val_loader,
+                    criterion,
+                    adv_test=True,
+                    diff_denoise=True,
+                    log_str="adv_dinoise",
+                    logger_index=2,
+                )
             else:
-                test_loss, Scores= self.evaluate_step(
-                    model, self.val_loader, criterion, adv_test=True,log_str="adv",logger_index=2
-                ) 
+                test_loss, Scores = self.evaluate_step(
+                    model,
+                    self.val_loader,
+                    criterion,
+                    adv_test=True,
+                    log_str="adv",
+                    logger_index=2,
+                )
         if self.val_loader2:
-            test_loss,Scores = self.evaluate_step(
-                model, self.val_loader2, criterion, adv_test=False,log_str="another_val",logger_index=1
-            ) 
+            test_loss, Scores = self.evaluate_step(
+                model,
+                self.val_loader2,
+                criterion,
+                adv_test=False,
+                log_str="another_val",
+                logger_index=1,
+            )
 
     def evaluate_step(
-        self, model, val_loader, criterion, adv_test=False, diff_denoise=False,log_str="val",logger_index=1
+        self,
+        model,
+        val_loader,
+        criterion,
+        adv_test=False,
+        diff_denoise=False,
+        log_str="val",
+        logger_index=1,
     ):
         device = self.device
         atk = self.atk
@@ -353,28 +400,30 @@ class Trainer:
                 loss = criterion(pred, label)
                 eval_loss += loss.item()
                 max_value, max_index = torch.max(pred, 1)
-                pred_label = max_index.cpu().numpy() 
+                pred_label = max_index.cpu().numpy()
                 true_label = label.cpu().numpy()
                 all_preds.extend(pred_label)
-                all_labels.extend(true_label) 
-
+                all_labels.extend(true_label)
 
         test_loss = eval_loss / float(len(val_loader))
         print(len(all_labels))
         print(len(all_preds))
         tn, fp, fn, tp = confusion_matrix(all_labels, all_preds, labels=[0, 1]).ravel()
- 
-        accuracy = accuracy_score(all_labels, all_preds)
-        precision = precision_score(all_labels, all_preds,zero_division=0)
-        recall = recall_score(all_labels, all_preds,zero_division=0)
-        f1 = f1_score(all_labels, all_preds,zero_division=0)
 
-                 
+        accuracy = accuracy_score(all_labels, all_preds)
+        precision = precision_score(all_labels, all_preds, zero_division=0)
+        recall = recall_score(all_labels, all_preds, zero_division=0)
+        f1 = f1_score(all_labels, all_preds, zero_division=0)
+
         if diff_denoise and args.save_denoise_pic_training:
             args.save_denoise_pic_training = False
 
-        print(f"Epoch{self.epoch}: {log_str} Loss:{test_loss}, accuracy: {accuracy:.4f}, precision: {precision:.4f}, recall: {recall:.4f}, f1: {f1:.4f}, tn, fp, fn, tp : {tn}, {fp}, {fn}, {tp}")
-        self.loggers[logger_index].info(f"Epoch{self.epoch}: {log_str} Loss:{test_loss}, accuracy: {accuracy:.4f}, precision: {precision:.4f}, recall: {recall:.4f}, f1: {f1:.4f}, tn, fp, fn, tp : {tn}, {fp}, {fn}, {tp}")
+        print(
+            f"Epoch{self.epoch}: {log_str} Loss:{test_loss}, accuracy: {accuracy:.4f}, precision: {precision:.4f}, recall: {recall:.4f}, f1: {f1:.4f}, tn, fp, fn, tp : {tn}, {fp}, {fn}, {tp}"
+        )
+        self.loggers[logger_index].info(
+            f"Epoch{self.epoch}: {log_str} Loss:{test_loss}, accuracy: {accuracy:.4f}, precision: {precision:.4f}, recall: {recall:.4f}, f1: {f1:.4f}, tn, fp, fn, tp : {tn}, {fp}, {fn}, {tp}"
+        )
 
         return test_loss, [tn, fp, fn, tp, accuracy, precision, recall, f1]
 
@@ -408,7 +457,9 @@ class Trainer:
         this_logger.addHandler(this_file_handler)
         return this_logger
 
-    def save_imgs(self, data_loader,save_path, adv=False, diff_denoise=False,normalize=False):
+    def save_imgs(
+        self, model,data_loader, save_path, adv=False, diff_denoise=False, normalize=False
+    ):
         device = self.device
         args = self.args
         atk = self.atk
@@ -419,7 +470,9 @@ class Trainer:
             imgs = image.to(device)
             label = label.to(device)
             if adv:
-                imgs = atk(imgs, label)
+                image = self.get_adv_imgs(
+                    model, x_natural=image, y=label, adv_mode=args.adv_mode, mode="val"
+                )
             if diff_denoise:
                 imgs = purify(
                     x=imgs,
@@ -477,9 +530,12 @@ class Trainer:
                     x_adv = torch.clamp(x_adv, 0.0, 1.0)
             else:
                 x_adv = torch.clamp(x_adv, 0.0, 1.0)
-        elif adv_mode == 2:  
-            x_adv = self.atk.run_standard_evaluation(x_natural, y, bs=self.args.batch_size)
+        elif adv_mode == 2:
+            x_adv = self.atk.run_standard_evaluation(
+                x_natural, y, bs=self.args.batch_size
+            )
+        elif adv_mode == 3 or adv_mode == 4:
+            x_adv = self.atk.attack(model, x_natural, labels=y, targeted=False)
         if mode == "train":
             model.train()
         return x_adv
-  

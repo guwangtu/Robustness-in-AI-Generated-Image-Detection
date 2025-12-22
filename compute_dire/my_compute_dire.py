@@ -140,12 +140,12 @@ def main():
                 recons_save_dir = args.recons_dir
                 dire_save_dir = args.dire_dir
             fn_save = os.path.basename(paths[i])
-            os.makedirs(recons_save_dir, exist_ok=True)
+            #os.makedirs(recons_save_dir, exist_ok=True)
             os.makedirs(dire_save_dir, exist_ok=True)
             cv2.imwrite(
                 f"{dire_save_dir}/{fn_save}", cv2.cvtColor(dire[i].cpu().numpy().astype(np.uint8), cv2.COLOR_RGB2BGR)
             )
-            cv2.imwrite(f"{recons_save_dir}/{fn_save}", cv2.cvtColor(recons[i].astype(np.uint8), cv2.COLOR_RGB2BGR))
+            #cv2.imwrite(f"{recons_save_dir}/{fn_save}", cv2.cvtColor(recons[i].astype(np.uint8), cv2.COLOR_RGB2BGR))
         logger.log(f"have finished {have_finished_images} samples")
 
     dist.barrier()

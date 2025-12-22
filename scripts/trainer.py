@@ -305,9 +305,6 @@ class Trainer:
         criterion = torch.nn.CrossEntropyLoss()
 
         args = self.args
-        """test_loss, Scores = self.evaluate_step(
-            model, self.val_loader, criterion, adv_test=False,log_str="val",logger_index=1
-        ) """
         if adv_test:
             if args.diff_denoise or args.diff_denoise_test:
                 test_loss, Scores = self.evaluate_step(
@@ -328,6 +325,10 @@ class Trainer:
                     log_str="adv",
                     logger_index=2,
                 )
+        else:
+            test_loss, Scores = self.evaluate_step(
+            model, self.val_loader, criterion, adv_test=False,log_str="val",logger_index=1
+        )
         if self.val_loader2:
             test_loss, Scores = self.evaluate_step(
                 model,
@@ -458,19 +459,19 @@ class Trainer:
         return this_logger
 
     def save_imgs(
-        self, model,data_loader, save_path, adv=False, diff_denoise=False, normalize=False
+        self,model, data_loader, save_path, adv=False, diff_denoise=False, normalize=False
     ):
         device = self.device
         args = self.args
         atk = self.atk
         i = 0
         j = 0
-
         for image, label in tqdm(data_loader):
-            imgs = image.to(device)
+            image = image.to(device)
             label = label.to(device)
+            
             if adv:
-                image = self.get_adv_imgs(
+                imgs = self.get_adv_imgs(
                     model, x_natural=image, y=label, adv_mode=args.adv_mode, mode="val"
                 )
             if diff_denoise:

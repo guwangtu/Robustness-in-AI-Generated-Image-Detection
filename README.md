@@ -6,14 +6,19 @@ conda activate ragid
 
 # Dataset format
 
-dataset//
-└── celeba//
-    ├── train//
-    │   ├── fake//
-    │   │   ├── image_001.jpg//
-    │   │   ├── image_002.jpg//
-    │   │   └── ...//
-    │   └── real//
+dataset/
+
+└── celeba/
+
+    ├── train/
+    
+    │   ├── fake/
+    
+    │   │   ├── image_001.jpg/
+    
+    │   │   ├── image_002.jpg/
+    │   │   └── .../
+    │   └── real/
     │       ├── image_001.jpg
     │       ├── image_002.jpg
     │       └── ...
@@ -31,3 +36,4 @@ python main.py --todo test  --simple_test --load_path checkpoints/dire_face_cele
 
 
 python main.py --todo test  --simple_test --load_path checkpoints/dire_face_celeba_sfhq_adv.pt --device 0 --data_paths datasets/celeba_pgd_multieps_dire/2pgd_16/test
+

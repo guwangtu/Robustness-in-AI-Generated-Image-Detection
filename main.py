@@ -12,7 +12,8 @@ import sys
 import torchattacks
 from torchattacks import PGD
 from autoattack import AutoAttack
-
+from scripts.attacker import CWAttacker,SquareAttacker
+from fast_adv.attacks import DDN
 
 import numpy as np
 import cv2
@@ -35,10 +36,10 @@ from scripts.load_data import (
 
 def main(args):
     print("---------------start---------------")
-    print(args)
+    # print(args)
 
     device = "cuda:" + str(args.device)
-
+    print("device:" + device)
     if args.model == "resnet":
         model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
         model.fc = torch.nn.Linear(2048, 2)
@@ -46,17 +47,17 @@ def main(args):
             load_path = args.load_path
             m_state_dict = torch.load(load_path, map_location=device)
             model.load_state_dict(m_state_dict)
-        model = model.to(device)
+        model = model.to(device, non_blocking=True)
     elif args.model == "vit":
         model = models.vit_b_16(weights=models.ViT_B_16_Weights.DEFAULT)
-        model.heads = torch.nn.Linear(768, 2) 
+        model.heads = torch.nn.Linear(768, 2)
         if args.load_path:
             load_path = args.load_path
-            m_state_dict = torch.load(load_path, map_location="cuda")
+            m_state_dict = torch.load(load_path, map_location=device)
             model.load_state_dict(m_state_dict)
-        model = model.to(device)
+        model = model.to(device, non_blocking=True)
 
-    if args.adv_mode==0 or args.adv_mode==1:
+    if args.adv_mode == 0 or args.adv_mode == 1:
         atk = PGD(
             model,
             eps=args.atk_eps,
@@ -66,9 +67,25 @@ def main(args):
         )
         atk.set_normalization_used(mean=[0, 0, 0], std=[1, 1, 1])
         atk.set_device(device)
-    elif args.adv_mode==2:
-        atk=AutoAttack(model, norm='Linf', eps=args.atk_eps, device=device,version='custom',attacks_to_run=['apgd-ce', 'fab','square'])
- 
+    elif args.adv_mode == 2:
+        atk = AutoAttack(
+            model,
+            norm="Linf",
+            eps=args.atk_eps,
+            verbose=False,
+            device=device,
+            version="custom",
+            attacks_to_run=["apgd-ce", "fab", "square"],
+        )
+    elif args.adv_mode == 3: 
+        atk = DDN(steps=100, device=device)
+    elif args.adv_mode == 4:
+        atk = CWAttacker(model, device, c=args.CW_c)
+    elif args.adv_mode == 5:
+        atk = SquareAttacker(model, device,norm="l2")
+    elif args.adv_mode == 6:
+        atk = SquareAttacker(model,device,norm="linf")
+
     trainer = Trainer(args, atk)
     if args.load_path2:
         load_path = args.load_path2
@@ -82,8 +99,7 @@ def main(args):
         print("adv:False")
 
     if args.n:
-        args.data_types=['n']*len(args.data_paths)
- 
+        args.data_types = ["n"] * len(args.data_paths)
 
     if args.todo == "train":
 
@@ -93,8 +109,8 @@ def main(args):
             [
                 # transforms.RandomRotation(20),  # 随机旋转角度
                 # transforms.ColorJitter(brightness=0.1),  # 颜色亮度
-                transforms.Resize([args.data_size,args.data_size]),   
-                transforms.Resize([224,224]),
+                transforms.Resize([args.data_size, args.data_size]),
+                transforms.Resize([224, 224]),
                 transforms.ToTensor(),
                 # transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225]),
             ]
@@ -102,7 +118,7 @@ def main(args):
 
         val_transform = transforms.Compose(
             [
-                transforms.Resize([args.data_size,args.data_size]),  
+                transforms.Resize([args.data_size, args.data_size]),
                 transforms.Resize([224, 224]),
                 transforms.ToTensor(),
             ]
@@ -186,15 +202,20 @@ def main(args):
                 transforms.ToTensor(),
             ]
         )
-        if not args.data_types:
-            val_data = load_single_dataset(val_path, transform=val_transform)
+        if args.simple_test:
+            val_data = load_single_dataset(args.data_paths[0], transform=val_transform)
         else:
             train_data, val_data = load_datasets(
                 args.data_paths,
                 args.data_types,
                 val_transform,
-                args.validation_split, 
-            ) 
+                args.validation_split,
+            )
+
+        if args.val_rate < 1.0:
+            val_data.shrink_dataset(args.val_rate)
+            print("val_rate :" + str(args.val_rate))
+
         print("val data:" + str(len(val_data)))
         val_loader = data.DataLoader(
             val_data,
@@ -216,7 +237,7 @@ def main(args):
             val_loader2 = None
         trainer.set_dataloader(val_loader=val_loader, val_loader2=val_loader2)
         trainer.evaluate(model, adv_test=args.adv or args.adv or args.diff_denoise)
-    
+
     elif args.todo == "degrade":
 
         save_path = "checkpoint/" + args.save_path
@@ -250,7 +271,7 @@ def main(args):
             trainer.evaluate(model, val_loader, adv_test=args.adv)
 
         val_transform = transforms.Compose(
-            [ 
+            [
                 transforms.Resize([224, 224]),
                 transforms.ToTensor(),
             ]
@@ -259,7 +280,7 @@ def main(args):
 
         downsample_128 = transforms.Compose(
             [
-                transforms.Resize(size=(128, 128)), 
+                transforms.Resize(size=(128, 128)),
                 transforms.Resize([224, 224]),
                 transforms.ToTensor(),
             ]
@@ -268,7 +289,7 @@ def main(args):
 
         downsample_64 = transforms.Compose(
             [
-                transforms.Resize(size=(64, 64)), 
+                transforms.Resize(size=(64, 64)),
                 transforms.Resize([224, 224]),
                 transforms.ToTensor(),
             ]
@@ -314,15 +335,19 @@ def main(args):
             [
                 # transforms.RandomRotation(20),  # 随机旋转角度
                 # transforms.ColorJitter(brightness=0.1),  # 颜色亮度
-                transforms.Resize([args.data_size, args.data_size]),  # 设置成224×224大小的张量
+                transforms.Resize(
+                    [args.data_size, args.data_size]
+                ),  # 设置成224×224大小的张量
                 transforms.ToTensor(),
                 # transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225]),
             ]
         )
-        val_transform=train_transform
+        val_transform = train_transform
         if not args.data_types:
             train_data, val_data = load_fold(
-                dataset_path, train_transform=train_transform, val_transform=val_transform
+                dataset_path,
+                train_transform=train_transform,
+                val_transform=val_transform,
             )
         else:
             train_data, val_data = load_datasets(
@@ -332,23 +357,27 @@ def main(args):
                 args.validation_split,
                 args.ratio_list,
             )
-
-        data_loader = data.DataLoader(
+        
+        '''data_loader = data.DataLoader(
             train_data,
             batch_size=args.batch_size,
             shuffle=True,
             num_workers=args.num_workers,
         )
-        save_path=args.save_path
-        trainer.save_imgs(data_loader,save_path+'/train', args.adv, args.diff_denoise)
-
+        save_path = args.save_path
+        trainer.save_imgs(
+            data_loader, save_path + "/train", args.adv, args.diff_denoise
+        )'''
+        if args.val_rate < 1.0:
+            val_data.shrink_dataset(args.val_rate)
+            print("val_rate :" + str(args.val_rate))
         data_loader = data.DataLoader(
             val_data,
             batch_size=args.batch_size,
             shuffle=True,
             num_workers=args.num_workers,
         )
-        trainer.save_imgs(data_loader,save_path+'/test', args.adv, args.diff_denoise)
+        trainer.save_imgs(model,data_loader,save_path+'/test', args.adv, args.diff_denoise)
 
 
 if __name__ == "__main__":

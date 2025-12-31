@@ -1,3 +1,10 @@
+import os
+import sys
+
+
+import numpy as np
+import cv2
+
 import torch
 import torch.nn as nn
 import torch.utils.data as data
@@ -6,22 +13,13 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 
-import os
-import sys
-
 import torchattacks
 from torchattacks import PGD
 from autoattack import AutoAttack
 from scripts.attacker import CWAttacker,SquareAttacker
 from fast_adv.attacks import DDN
 
-import numpy as np
-import cv2
-
-from tqdm import tqdm
-
-from scripts.argument import parser
-import logging
+from scripts.argument import get_parser
 from scripts.trainer import Trainer
 from scripts.load_data import (
     load_single_dataset,
@@ -31,32 +29,25 @@ from scripts.load_data import (
     load_GenImage,
     load_data_2_path,
     load_datasets,
+    load_norm_data
 )
 
-
-def main(args):
-    print("---------------start---------------")
-    # print(args)
-
-    device = "cuda:" + str(args.device)
-    print("device:" + device)
+def setup_model(args,device):
     if args.model == "resnet":
         model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
         model.fc = torch.nn.Linear(2048, 2)
-        if args.load_path:
-            load_path = args.load_path
-            m_state_dict = torch.load(load_path, map_location=device)
-            model.load_state_dict(m_state_dict)
-        model = model.to(device, non_blocking=True)
     elif args.model == "vit":
         model = models.vit_b_16(weights=models.ViT_B_16_Weights.DEFAULT)
         model.heads = torch.nn.Linear(768, 2)
-        if args.load_path:
-            load_path = args.load_path
-            m_state_dict = torch.load(load_path, map_location=device)
-            model.load_state_dict(m_state_dict)
-        model = model.to(device, non_blocking=True)
+        
+    if args.load_path:
+        load_path = args.load_path
+        m_state_dict = torch.load(load_path, map_location=device)
+        model.load_state_dict(m_state_dict)
+    model = model.to(device, non_blocking=True)
+    return model
 
+def setup_attacker(args,model,device):
     if args.adv_mode == 0 or args.adv_mode == 1:
         atk = PGD(
             model,
@@ -85,303 +76,176 @@ def main(args):
         atk = SquareAttacker(model, device,norm="l2")
     elif args.adv_mode == 6:
         atk = SquareAttacker(model,device,norm="linf")
+    return atk
 
-    trainer = Trainer(args, atk)
-    if args.load_path2:
-        load_path = args.load_path2
-        m_state_dict = torch.load(load_path, map_location="cuda")
-        model.load_state_dict(m_state_dict)
-        print("load2")
+def prepare_transforms(args):
+    train_transform = transforms.Compose(
+        [
+            # transforms.RandomRotation(20),  # 随机旋转角度
+            # transforms.ColorJitter(brightness=0.1),  # 颜色亮度
+            transforms.Resize([args.data_size, args.data_size]),
+            transforms.Resize([224, 224]),
+            transforms.ToTensor(),
+            # transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225]),
+        ]
+    )
+    val_transform = transforms.Compose(
+        [
+            transforms.Resize([args.data_size, args.data_size]),
+            transforms.Resize([224, 224]),
+            transforms.ToTensor(),
+        ]
+    )
+    return train_transform, val_transform
+
+def prepare_dataloader(data_paths,train_transform,val_transform,val_split,ratio_list,b_s,shuffle,n_w,val_rate,combine_all=True):
+    train_data, val_data = load_norm_data(
+        data_paths,
+        train_transform,
+        val_transform,
+        val_split,
+        ratio_list,
+        combine_all=combine_all
+    )
+    
+    train_loaders=[]
+    val_loaders = []
+    for i in range(len(data_paths)):
+        t_loader = data.DataLoader(
+            train_data[i],
+            batch_size=b_s,
+            shuffle=shuffle,
+            num_workers=n_w,
+        )
+        if val_rate<1.0:
+            val_data.shrink_dataset(args.val_rate)
+        v_loader = data.DataLoader(
+            val_data[i],
+            batch_size=b_s,
+            shuffle=shuffle,
+            num_workers=n_w,
+        )
+        if combine_all:
+            return t_loader, v_loader
+        train_loaders.append(t_loader)
+        val_loaders.append(v_loader)
+        
+    return train_loaders, val_loaders
+    
+    
+    
+    
+def run_train(args, trainer, model):
+    train_transform, val_transform = prepare_transforms(args)
+
+    train_loader1,val_loader1=prepare_dataloader(args.data_paths,train_transform,val_transform,args.validation_split,args.ratio_list,args.batch_size,not args.not_shuffle,args.num_workers)
+    train_loader1=train_loader1[0]
+    val_loader1=val_loader1[0]
+    if args.data_paths2:
+        train_loader2,val_loader2=prepare_dataloader(args.data_paths2,train_transform,val_transform,args.validation_split,args.ratio_list,args.batch_size,not args.not_shuffle,args.num_workers)
+        train_loader2=train_loader2[0]
+        val_loader2=val_loader2[0]
+    else:
+        train_loader2=None
+        val_loader2=None
+    
+    trainer.set_dataloader(
+        train_loader=train_loader1,
+        train_loader2=train_loader2,
+        val_loader=val_loader1,
+        val_loader2=val_loader2,
+    )
+    trainer.train(model, args.adv)
+    
+    
+    
+
+def run_test(args,trainer,model):
+    train_transform, val_transform = prepare_transforms(args)
+    
+    _,val_loader=prepare_dataloader(args.data_paths,val_transform,val_transform,args.validation_split,args.ratio_list,args.batch_size,not args.not_shuffle,args.num_workers,args.val_rate)
+
+        
+    trainer.set_dataloader(val_loader=val_loader[0])
+    trainer.evaluate(model, adv_test=args.adv or args.adv or args.diff_denoise)
+    if args.not_combine:
+        _,val_loaders=prepare_dataloader(args.data_paths,val_transform,val_transform,args.validation_split,args.ratio_list,args.batch_size,not args.not_shuffle,args.num_workers,args.val_rate,combine_all=False)
+        for i in range(len(args.data_paths)):
+            print(f"Testing on dataset: {args.data_paths[i].split('/')[-1]}")
+            single_val_loader=val_loaders[i]
+            trainer.set_dataloader(val_loader=single_val_loader)
+            trainer.evaluate(model, adv_test=args.adv or args.adv or args.diff_denoise)
+ 
+def run_get_imgs(args,trainer,model):
+    train_transform, val_transform = prepare_transforms(args)
+    if not os.path.isdir(args.save_path):
+        os.mkdir(args.save_path)
+    train_loaders,val_loaders=prepare_dataloader(args.data_paths,val_transform,val_transform,args.validation_split,args.ratio_list,args.batch_size,not args.not_shuffle,args.num_workers,args.val_rate,combine_all=not args.not_combine)
+    if args.val_only:
+        
+def main(args):
+    print("---------------start---------------")
+    device = "cuda:" + str(args.device)
+    print("using device:" + device)
+    
+    
+    model = setup_model(args,device)
 
     if args.adv:
-        print("adv:True")
+        atk = setup_attacker(args,model,device)
     else:
-        print("adv:False")
-
+        atk=None
+    
+    trainer = Trainer(args, atk)
+    
     if args.n:
         args.data_types = ["n"] * len(args.data_paths)
-
-    if args.todo == "train":
-
-        dataset_path = args.dataset
-
-        train_transform = transforms.Compose(
-            [
-                # transforms.RandomRotation(20),  # 随机旋转角度
-                # transforms.ColorJitter(brightness=0.1),  # 颜色亮度
-                transforms.Resize([args.data_size, args.data_size]),
-                transforms.Resize([224, 224]),
-                transforms.ToTensor(),
-                # transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225]),
-            ]
-        )
-
-        val_transform = transforms.Compose(
-            [
-                transforms.Resize([args.data_size, args.data_size]),
-                transforms.Resize([224, 224]),
-                transforms.ToTensor(),
-            ]
-        )
-        if not args.data_types:
-            train_data, val_data = load_fold(
-                dataset_path, train_transform, val_transform
-            )
-        else:
-            train_data, val_data = load_datasets(
-                args.data_paths,
-                args.data_types,
-                train_transform,
-                args.validation_split,
-                args.ratio_list,
-            )
-        """from torch.utils.data import Dataset, DataLoader, random_split, ConcatDataset
-        train_data=ConcatDataset([train_data,val_data])
-        from scripts.load_data import spilt_dataset
-        train_data, val_data=spilt_dataset(train_data)"""
-
-        print("train data:" + str(len(train_data)))
-        print("val data:" + str(len(val_data)))
-
-        train_loader = data.DataLoader(
-            train_data,
-            batch_size=args.batch_size,
-            shuffle=not args.not_shuffle,
-            num_workers=args.num_workers,
-        )
-        val_loader = data.DataLoader(
-            val_data,
-            batch_size=args.batch_size,
-            shuffle=not args.not_shuffle,
-            num_workers=args.num_workers,
-        )
-
-        if args.train_dataset2:
-            print("using train_dataset2")
-            train_path2 = args.train_dataset2
-            train_data2 = load_single_dataset(train_path2, transform=train_transform)
-            train_loader2 = data.DataLoader(
-                train_data2,
-                batch_size=args.batch_size,
-                shuffle=not args.not_shuffle,
-                num_workers=args.num_workers,
-            )
-            print("train data2:" + str(len(train_data2)))
-        else:
-            train_loader2 = None
-        if args.val_dataset2:
-            print("using val_dataset2")
-            val_path2 = args.val_dataset2
-            val_data2 = load_single_dataset(val_path2, transform=val_transform)
-            val_loader2 = data.DataLoader(
-                val_data2,
-                batch_size=args.batch_size,
-                shuffle=not args.not_shuffle,
-                num_workers=args.num_workers,
-            )
-            print("val data:2" + str(len(val_data2)))
-        else:
-            val_loader2 = None
-
-        trainer.set_dataloader(
-            train_loader=train_loader,
-            train_loader2=train_loader2,
-            val_loader=val_loader,
-            val_loader2=val_loader2,
-        )
-        trainer.train(model, args.adv)
-
-    elif args.todo == "test":
-
-        val_path = args.dataset
-
-        val_transform = transforms.Compose(
-            [
-                transforms.Resize([args.data_size, args.data_size]),
-                transforms.Resize([224, 224]),
-                transforms.ToTensor(),
-            ]
-        )
-        if args.simple_test:
-            val_data = load_single_dataset(args.data_paths[0], transform=val_transform)
-        else:
-            train_data, val_data = load_datasets(
-                args.data_paths,
-                args.data_types,
-                val_transform,
-                args.validation_split,
-            )
-
-        if args.val_rate < 1.0:
-            val_data.shrink_dataset(args.val_rate)
-            print("val_rate :" + str(args.val_rate))
-
-        print("val data:" + str(len(val_data)))
-        val_loader = data.DataLoader(
-            val_data,
-            batch_size=args.batch_size,
-            shuffle=True,
-            num_workers=args.num_workers,
-        )
-        if args.val_dataset2:
-            print("using val_dataset2")
-            val_path2 = args.val_dataset2
-            val_data2 = load_single_dataset(val_path2, transform=val_transform)
-            val_loader2 = data.DataLoader(
-                val_data2,
-                batch_size=args.batch_size,
-                shuffle=not args.not_shuffle,
-                num_workers=args.num_workers,
-            )
-        else:
-            val_loader2 = None
-        trainer.set_dataloader(val_loader=val_loader, val_loader2=val_loader2)
-        trainer.evaluate(model, adv_test=args.adv or args.adv or args.diff_denoise)
-
-    elif args.todo == "degrade":
-
-        save_path = "checkpoint/" + args.save_path
-        if not os.path.isdir("checkpoint"):
-            os.mkdir("checkpoint")
-        if not os.path.isdir(save_path):
-            os.mkdir(save_path)
-
-        int_files = [int(file) for file in os.listdir(save_path)]
-        if len(int_files) == 0:
-            save_path = os.path.join(save_path, "1")
-        else:
-            save_path = os.path.join(save_path, str(max(int_files) + 1))
-
-        os.mkdir(save_path)
-        trainer.set_loggers(
-            save_path + "/" + args.save_path
-        )  # 例：...savepath/2/savepath          顺序train,test,advtest
-
-        val_path = args.dataset
-
-        def my_evaluate(this_transform, namestr):
-            val_data = datasets.ImageFolder(val_path, transform=this_transform)
-            val_loader = data.DataLoader(
-                val_data,
-                batch_size=args.batch_size,
-                shuffle=True,
-                num_workers=args.num_workers,
-            )
-            print(namestr + " evaluate")
-            trainer.evaluate(model, val_loader, adv_test=args.adv)
-
-        val_transform = transforms.Compose(
-            [
-                transforms.Resize([224, 224]),
-                transforms.ToTensor(),
-            ]
-        )
-        my_evaluate(val_transform, "Normal")
-
-        downsample_128 = transforms.Compose(
-            [
-                transforms.Resize(size=(128, 128)),
-                transforms.Resize([224, 224]),
-                transforms.ToTensor(),
-            ]
-        )
-        my_evaluate(downsample_128, "downsample_128")
-
-        downsample_64 = transforms.Compose(
-            [
-                transforms.Resize(size=(64, 64)),
-                transforms.Resize([224, 224]),
-                transforms.ToTensor(),
-            ]
-        )
-        my_evaluate(downsample_64, "downsample_64")
-
-        flip_transform = transforms.Compose(
-            [
-                transforms.RandomHorizontalFlip(p=1.0),
-                transforms.Resize([224, 224]),
-                transforms.ToTensor(),
-            ]
-        )
-        my_evaluate(flip_transform, "flip_transform")
-
-        crop_transform = transforms.Compose(
-            [
-                transforms.RandomResizedCrop(
-                    size=(224, 224), scale=(0.8, 0.85), ratio=(3.0 / 4.0, 4.0 / 3.0)
-                ),
-                transforms.ToTensor(),
-            ]
-        )
-        my_evaluate(crop_transform, "Crop")
-
-        rotate_transform = transforms.Compose(
-            [
-                transforms.RandomRotation(degrees=(-45, 45)),
-                transforms.Resize([args.data_size, args.data_size]),
-                transforms.ToTensor(),
-            ]
-        )
-        my_evaluate(rotate_transform, "Rotate")
-
-    elif args.todo == "get_imgs":
-
-        dataset_path = args.dataset
-        save_path = args.save_path
-        if not os.path.isdir(save_path):
-            os.mkdir(save_path)
-
-        train_transform = transforms.Compose(
-            [
-                # transforms.RandomRotation(20),  # 随机旋转角度
-                # transforms.ColorJitter(brightness=0.1),  # 颜色亮度
-                transforms.Resize(
-                    [args.data_size, args.data_size]
-                ),  # 设置成224×224大小的张量
-                transforms.ToTensor(),
-                # transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225]),
-            ]
-        )
-        val_transform = train_transform
-        if not args.data_types:
-            train_data, val_data = load_fold(
-                dataset_path,
-                train_transform=train_transform,
-                val_transform=val_transform,
-            )
-        else:
-            train_data, val_data = load_datasets(
-                args.data_paths,
-                args.data_types,
-                train_transform,
-                args.validation_split,
-                args.ratio_list,
-            )
-        
-        '''data_loader = data.DataLoader(
-            train_data,
-            batch_size=args.batch_size,
-            shuffle=True,
-            num_workers=args.num_workers,
-        )
-        save_path = args.save_path
-        trainer.save_imgs(
-            data_loader, save_path + "/train", args.adv, args.diff_denoise
-        )'''
-        if args.val_rate < 1.0:
-            val_data.shrink_dataset(args.val_rate)
-            print("val_rate :" + str(args.val_rate))
-        data_loader = data.DataLoader(
-            val_data,
-            batch_size=args.batch_size,
-            shuffle=True,
-            num_workers=args.num_workers,
-        )
-        trainer.save_imgs(model,data_loader,save_path+'/test', args.adv, args.diff_denoise)
-
+    
+    task_map = {
+        "train": run_train,
+        "test": run_test,
+        "get_imgs": run_get_imgs
+    }
+    
+    if args.todo in task_map:
+        task_map[args.todo](args, trainer, model)
+    else:
+        print(f"Unknown task: {args.todo}")
+   
 
 if __name__ == "__main__":
 
-    args = parser()
-
+    args = get_parser()
+    
     main(args)
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    

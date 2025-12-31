@@ -120,8 +120,5 @@ def parser():
     parser.add_argument("--val_rate", type=float, default=1.0)
     parser.add_argument("--simple_test", default=False, action="store_true")
     # parser.add_argument("--log_path", default="log/training.log") #改成自动的了
-    
-    
-    parser.add_argument("--not_combine", default=False, action="store_true")
 
     return parser.parse_args()

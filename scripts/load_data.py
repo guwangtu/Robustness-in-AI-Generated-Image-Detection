@@ -190,7 +190,7 @@ def load_GenImage(GenImage_path, *args, **kwargs):  # real 0
 
 
 def load_fold(path, *args, **kwargs):  # 0真1假
-    # 标准化数据集格式biaozhun
+    # 标准化数据集格式
     # -fold
     # --train
     # ---real
@@ -205,8 +205,13 @@ def load_fold(path, *args, **kwargs):  # 0真1假
     except:
         train_transform = kwargs.get("transform", None)
         val_transform = kwargs.get("transform", None)
-    train_dataset = load_single_dataset(train_path, train_transform)
-    val_dataset = load_single_dataset(test_path, val_transform)
+        
+    if not os.path.exists(test_path) and not os.path.exists(train_path):
+        val_dataset = load_single_dataset(path, val_transform)
+        train_path = MyDataset([],[])
+    else:
+        train_dataset = load_single_dataset(train_path, train_transform)
+        val_dataset = load_single_dataset(test_path, val_transform)
     return train_dataset, val_dataset
 
 
@@ -279,6 +284,7 @@ def load_datasets(
     data_paths,
     data_types,
     train_transform=None,
+    val_transform=None,
     validation_split=0.2,
     ratio_list=None,
     concat=True,
@@ -294,7 +300,8 @@ def load_datasets(
         train_dataset, val_dataset = get_load_function(this_type)(
             path=this_path,
             label=type_map[this_type],
-            transform=train_transform,
+            train_transform=train_transform,
+            val_transform=val_transform,
             validation_split=validation_split,
         )
         train_datasets.append(train_dataset)
@@ -309,9 +316,21 @@ def load_datasets(
         )
     # bd = balance_data(data_list,ratio_list)
     if concat:
-        return ConcatDataset(train_datasets), ConcatDataset(val_datasets)
+        return [ConcatDataset(train_datasets)], [ConcatDataset(val_datasets)]
     else:
         return train_datasets, val_datasets
+
+def load_norm_data(
+    data_paths,
+    train_transform=None,
+    val_transform=None,
+    validation_split=0.2,
+    ratio_list=None,
+    concat=True,
+):
+    data_types=["n"]*len(data_paths)
+    return load_datasets(data_paths,data_types,train_transform,val_transform,validation_split,ratio_list,concat)
+
 
 
 def load_data_2_path(
@@ -347,6 +366,8 @@ def load_images(path):
 def load_single_dataset(path, transform=None):  # 0真1假
     file_real_list = ["real", "nature"]
     datasets = []
+    if not os.path.exists(path):
+        return MyDataset([],[])
     for file in os.listdir(path):
         if "." in file:
             continue

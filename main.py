@@ -98,7 +98,14 @@ def prepare_transforms(args):
     )
     return train_transform, val_transform
 
-def prepare_dataloader(data_paths,train_transform,val_transform,val_split,ratio_list,b_s,shuffle,n_w,val_rate,combine_all=True):
+def prepare_dataloader(data_paths,train_transform,val_transform,combine_all=True,args=None):
+    val_split=args.validation_split
+    ratio_list=args.ratio_list
+    b_s=args.batch_size
+    shuffle=not args.not_shuffle
+    n_w=args.num_workers
+    val_rate=args.val_rate
+
     train_data, val_data = load_norm_data(
         data_paths,
         train_transform,
@@ -138,11 +145,11 @@ def prepare_dataloader(data_paths,train_transform,val_transform,val_split,ratio_
 def run_train(args, trainer, model):
     train_transform, val_transform = prepare_transforms(args)
 
-    train_loader1,val_loader1=prepare_dataloader(args.data_paths,train_transform,val_transform,args.validation_split,args.ratio_list,args.batch_size,not args.not_shuffle,args.num_workers)
+    train_loader1,val_loader1=prepare_dataloader(args.data_paths,train_transform,val_transform,combine_all=True,args=args)
     train_loader1=train_loader1[0]
     val_loader1=val_loader1[0]
     if args.data_paths2:
-        train_loader2,val_loader2=prepare_dataloader(args.data_paths2,train_transform,val_transform,args.validation_split,args.ratio_list,args.batch_size,not args.not_shuffle,args.num_workers)
+        train_loader2,val_loader2=prepare_dataloader(args.data_paths2,train_transform,val_transform,combine_all=True,args=args)
         train_loader2=train_loader2[0]
         val_loader2=val_loader2[0]
     else:
@@ -163,13 +170,12 @@ def run_train(args, trainer, model):
 def run_test(args,trainer,model):
     train_transform, val_transform = prepare_transforms(args)
     
-    _,val_loader=prepare_dataloader(args.data_paths,val_transform,val_transform,args.validation_split,args.ratio_list,args.batch_size,not args.not_shuffle,args.num_workers,args.val_rate)
+    _,val_loader=prepare_dataloader(args.data_paths,val_transform,val_transform,combine_all=True,args=args)
 
-        
     trainer.set_dataloader(val_loader=val_loader[0])
     trainer.evaluate(model, adv_test=args.adv or args.adv or args.diff_denoise)
     if args.not_combine:
-        _,val_loaders=prepare_dataloader(args.data_paths,val_transform,val_transform,args.validation_split,args.ratio_list,args.batch_size,not args.not_shuffle,args.num_workers,args.val_rate,combine_all=False)
+        _,val_loaders=prepare_dataloader(args.data_paths,val_transform,val_transform,combine_all=False,args=args)
         for i in range(len(args.data_paths)):
             print(f"Testing on dataset: {args.data_paths[i].split('/')[-1]}")
             single_val_loader=val_loaders[i]
@@ -178,11 +184,16 @@ def run_test(args,trainer,model):
  
 def run_get_imgs(args,trainer,model):
     train_transform, val_transform = prepare_transforms(args)
-    if not os.path.isdir(args.save_path):
-        os.mkdir(args.save_path)
-    train_loaders,val_loaders=prepare_dataloader(args.data_paths,val_transform,val_transform,args.validation_split,args.ratio_list,args.batch_size,not args.not_shuffle,args.num_workers,args.val_rate,combine_all=not args.not_combine)
-    if args.val_only:
-        
+    save_path = args.save_path
+    if not os.path.isdir(save_path):
+        os.mkdir(save_path)
+
+    train_loader,val_loader=prepare_dataloader(args.data_paths,val_transform,val_transform,combine_all=True,args=args)
+    
+    if not args.val_only:
+        trainer.save_imgs(model,train_loader,save_path+'/train', args.adv, args.diff_denoise)
+    trainer.save_imgs(model,val_loader,save_path+'/test', args.adv, args.diff_denoise)
+
 def main(args):
     print("---------------start---------------")
     device = "cuda:" + str(args.device)

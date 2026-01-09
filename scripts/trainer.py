@@ -34,9 +34,8 @@ from scripts.load_data import (
     load_diffusion_forensics,
     load_GenImage,
 )
-from scripts.loss import trades_loss, mart_loss, diff_denoise_loss
-from scripts.utils import get_imagenet_dm_conf, label_to_str, get_crt_num
-from scripts.diff_denoise import purify
+from scripts.loss import trades_loss, mart_loss
+from scripts.utils import label_to_str, get_crt_num
 
 
 class Trainer:
@@ -71,11 +70,6 @@ class Trainer:
                 self.save_path + "/" + args.save_path
             )  # 例：...savepath/2/savepath          顺序train,test,advtest
 
-        if args.diff_denoise:
-            respace = "ddim100"
-            self.df_model, self.diffusion = get_imagenet_dm_conf(
-                device=self.device, respace=respace, model_path=args.diffusion_path
-            )
 
     def set_dataloader(
         self, train_loader=None, train_loader2=None, val_loader=None, val_loader2=None
@@ -95,7 +89,8 @@ class Trainer:
         criterion = torch.nn.CrossEntropyLoss()
         if args.sgd:
             optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+        else:
+            optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
         if args.test_first:
             self.evaluate(
@@ -210,22 +205,7 @@ class Trainer:
                     adv_mode=args.adv_mode,
                     mode="train",
                 )
-                if args.diff_denoise:
-
-                    denoise_loss, adv_correct_num = diff_denoise_loss(
-                        train_model=model,
-                        df_model=self.df_model,
-                        diffusion=self.diffusion,
-                        y=label,
-                        criterion=criterion,
-                        x_adv=adv_image,
-                        t=args.diff_denoise_t,
-                        save_pic=args.save_denoise_pic_training,
-                        save_path=args.save_denoise_path,
-                    )
-                    loss = loss + denoise_loss
-
-                elif args.TRADES:
+                if args.TRADES:
                     loss, adv_correct_num = trades_loss(
                         model=model,
                         x_natural=image,
@@ -280,16 +260,7 @@ class Trainer:
                             log_str=f"Batch_id:{i}  adv",
                             logger_index=0,
                         )
-                        if args.diff_denoise:
-                            test_loss, Scores = self.evaluate_step(
-                                model,
-                                self.val_loader,
-                                criterion,
-                                adv_test=True,
-                                diff_denoise=True,
-                                log_str=f"Batch_id:{i}  adv_diff_denoise",
-                                logger_index=0,
-                            )
+                        
                     model.train()
             # np.save("batch_losses.npy",np.array(losses))
         acc.append(train_corrects / train_sum)
@@ -306,25 +277,14 @@ class Trainer:
 
         args = self.args
         if adv_test:
-            if args.diff_denoise or args.diff_denoise_test:
-                test_loss, Scores = self.evaluate_step(
-                    model,
-                    self.val_loader,
-                    criterion,
-                    adv_test=True,
-                    diff_denoise=True,
-                    log_str="adv_dinoise",
-                    logger_index=2,
-                )
-            else:
-                test_loss, Scores = self.evaluate_step(
-                    model,
-                    self.val_loader,
-                    criterion,
-                    adv_test=True,
-                    log_str="adv",
-                    logger_index=2,
-                )
+            test_loss, Scores = self.evaluate_step(
+                model,
+                self.val_loader,
+                criterion,
+                adv_test=True,
+                log_str="adv",
+                logger_index=2,
+            )
         else:
             test_loss, Scores = self.evaluate_step(
             model, self.val_loader, criterion, adv_test=False,log_str="val",logger_index=1
@@ -345,7 +305,6 @@ class Trainer:
         val_loader,
         criterion,
         adv_test=False,
-        diff_denoise=False,
         log_str="val",
         logger_index=1,
     ):
@@ -356,14 +315,6 @@ class Trainer:
         corrects = eval_loss = 0
         test_sum = 0
 
-        if diff_denoise and args.save_denoise_pic_training:
-
-            save_path = args.save_denoise_path + "/test"
-            print("save in" + save_path)
-            if not os.path.isdir(save_path):
-                os.mkdir(save_path)
-            i = 0
-            j = 0
         all_preds = []
         all_labels = []
         for image, label in tqdm(val_loader):
@@ -373,28 +324,7 @@ class Trainer:
                 image = self.get_adv_imgs(
                     model, x_natural=image, y=label, adv_mode=args.adv_mode, mode="val"
                 )
-                if diff_denoise:
-                    image = purify(
-                        x=image,
-                        t=args.diff_denoise_t,
-                        model=self.df_model,
-                        diffusion=self.diffusion,
-                    )
-                    if args.save_denoise_pic_training:
-                        imgs = image
-                        for t in range(len(label)):
-                            this_label = label[t].cpu().numpy().astype(np.uint8)
-                            label_str = label_to_str(this_label)
-                            os.makedirs(f"{save_path}/{label_str}", exist_ok=True)
-                            if this_label == 0:
-                                i += 1
-                                k = i
-                            else:
-                                j += 1
-                                k = j
-                            torchvision.utils.save_image(
-                                imgs[t], f"{save_path}/{label_str}/{str(k)}.png"
-                            )
+                
 
             with torch.no_grad():
                 pred = model(image)
@@ -416,8 +346,6 @@ class Trainer:
         recall = recall_score(all_labels, all_preds, zero_division=0)
         f1 = f1_score(all_labels, all_preds, zero_division=0)
 
-        if diff_denoise and args.save_denoise_pic_training:
-            args.save_denoise_pic_training = False
 
         print(
             f"Epoch{self.epoch}: {log_str} Loss:{test_loss}, accuracy: {accuracy:.4f}, precision: {precision:.4f}, recall: {recall:.4f}, f1: {f1:.4f}, tn, fp, fn, tp : {tn}, {fp}, {fn}, {tp}"
@@ -436,7 +364,7 @@ class Trainer:
         test_logger = self.get_logger(save_path, "test")
         self.loggers.append(train_logger)
         self.loggers.append(test_logger)
-        if args.adv or args.diff_denoise or args.adv_test:
+        if args.adv or args.adv_test:
             adv_test_logger = self.get_logger(save_path, "adv_test")
             self.loggers.append(adv_test_logger)
 
@@ -459,7 +387,7 @@ class Trainer:
         return this_logger
 
     def save_imgs(
-        self,model, data_loader, save_path, adv=False, diff_denoise=False, normalize=False
+        self,model, data_loader, save_path, adv=False, normalize=False
     ):
         device = self.device
         args = self.args
@@ -473,13 +401,6 @@ class Trainer:
             if adv:
                 imgs = self.get_adv_imgs(
                     model, x_natural=image, y=label, adv_mode=args.adv_mode, mode="val"
-                )
-            if diff_denoise:
-                imgs = purify(
-                    x=imgs,
-                    t=args.diff_denoise_t,
-                    model=self.df_model,
-                    diffusion=self.diffusion,
                 )
             for t in range(len(label)):
                 this_label = label[t].cpu().numpy().astype(np.uint8)

@@ -27,21 +27,18 @@ def parser():
     parser.add_argument("--model", default="resnet", type=str, help="resnet,vit")
 
     parser.add_argument("--dataset", default=None)
-    parser.add_argument("--train_dataset2", default=None)
-    parser.add_argument("--val_dataset2", default=None)
     parser.add_argument("--epoches", type=int, default=10)
     parser.add_argument("--adv_test", default=False, action="store_true")
     parser.add_argument("--not_shuffle", default=False, action="store_true")
     parser.add_argument("--save_each_epoch", type=int, default=1)
     parser.add_argument("--save_path", default="test")
+    parser.add_argument("--sgd", default=False, action="store_true")
     parser.add_argument("--lr", type=float, default=5e-5)
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--data_size", type=int, default=224)
     parser.add_argument("--num_workers", type=int, default=8)
     parser.add_argument("--load_path", default=None)
-    parser.add_argument("--load_path2", default=None)
     parser.add_argument("--load_epoch", type=int, default=0)
-    parser.add_argument("--sgd", default=False, action="store_true")
     parser.add_argument("--test_each_batch", type=int, default=0)
     parser.add_argument("--save_loss", default=False, action="store_true")
 
@@ -50,25 +47,16 @@ def parser():
         type=str,
         default="/data/user/shx/Generate_image_detection/compute_dire/models/256x256_diffusion_uncond.pt",
     )
-    parser.add_argument("--real_path", default=None)
-    parser.add_argument("--fake_path", default=None)
-    parser.add_argument("--each_class_num", type=int, default=0)
-
     parser.add_argument("--adv", default=False, action="store_true")
     parser.add_argument(
         "--adv_mode", type=int, default=0
     )  # 0:normal 1:Manually implemented 2:autoattack 3:DDN 4:CW 5:quareAttack l2 6:quareAttack linf
     parser.add_argument("--CW_c", type=float, default=0.0001)  # CW攻击的强度系数
 
-
-    parser.add_argument("--diff_denoise", default=False, action="store_true")
-    parser.add_argument("--diff_denoise_test", default=False, action="store_true")
-    # parser.add_argument("--denoise_train_beta", type = float, default = 1.0)
-    parser.add_argument("--diff_denoise_t", type=int, default=2)
     parser.add_argument("--atk_eps", type=str_to_float, default=8 / 255)  # bound
     parser.add_argument("--atk_alpha", type=str_to_float, default=2 / 255)
     parser.add_argument("--atk_steps", type=int, default=10)
-    parser.add_argument("--update_adv_each_epoch", type=int, default=100)
+    parser.add_argument("--update_adv_each_epoch", type=int, default=1)
 
     parser.add_argument("--TRADES", default=False, action="store_true")
     parser.add_argument("--TRADES_beta", type=float, default=1.0)
@@ -77,16 +65,7 @@ def parser():
     parser.add_argument("--MART_beta", type=float, default=6.0)
     parser.add_argument("--normal_adv", default=False, action="store_true")
 
-    parser.add_argument(
-        "--save_denoise_pic_training", default=False, action="store_true"
-    )
-    parser.add_argument("--save_denoise_path", default=None)
-
     parser.add_argument("--test_first", default=False, action="store_true")
-    parser.add_argument("--artifact", default=False, action="store_true")
-    parser.add_argument("--df", default=False, action="store_true")
-    parser.add_argument("--genimage", default=False, action="store_true")
-    parser.add_argument("--imagenet", default=None)
 
     parser.add_argument(
         "--data_paths", type=str, nargs="+", default=None, help="Paths to the datasets"
@@ -118,10 +97,14 @@ def parser():
     parser.add_argument("--validation_split", type=float, default=0.2)
 
     parser.add_argument("--val_rate", type=float, default=1.0)
-    parser.add_argument("--simple_test", default=False, action="store_true")
-    # parser.add_argument("--log_path", default="log/training.log") #改成自动的了
-    
     
     parser.add_argument("--not_combine", default=False, action="store_true")
 
     return parser.parse_args()
+
+def get_parser():
+    args = parser()
+    if args.adv:
+        args.adv_test = True
+
+    return args

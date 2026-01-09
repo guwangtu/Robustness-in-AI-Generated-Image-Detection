@@ -71,6 +71,9 @@ def parser():
         "--data_paths", type=str, nargs="+", default=None, help="Paths to the datasets"
     )
     parser.add_argument(
+        "--data_paths2", type=str, nargs="+", default=None, help="Paths to the datasets"
+    )
+    parser.add_argument(
         "--data_types",
         type=str,
         nargs="+",

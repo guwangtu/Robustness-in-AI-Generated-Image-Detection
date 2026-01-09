@@ -112,7 +112,7 @@ def prepare_dataloader(data_paths,train_transform,val_transform,combine_all=True
         val_transform,
         val_split,
         ratio_list,
-        combine_all=combine_all
+        concat=combine_all
     )
     
     train_loaders=[]
@@ -132,8 +132,6 @@ def prepare_dataloader(data_paths,train_transform,val_transform,combine_all=True
             shuffle=shuffle,
             num_workers=n_w,
         )
-        if combine_all:
-            return t_loader, v_loader
         train_loaders.append(t_loader)
         val_loaders.append(v_loader)
         

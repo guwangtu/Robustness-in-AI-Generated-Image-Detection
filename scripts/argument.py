@@ -102,6 +102,7 @@ def parser():
     parser.add_argument("--val_rate", type=float, default=1.0)
     
     parser.add_argument("--not_combine", default=False, action="store_true")
+    parser.add_argument("--val_only", default=False, action="store_true")
 
     return parser.parse_args()
 

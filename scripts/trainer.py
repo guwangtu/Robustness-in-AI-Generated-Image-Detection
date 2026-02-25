@@ -397,7 +397,7 @@ class Trainer:
         for image, label in tqdm(data_loader):
             image = image.to(device)
             label = label.to(device)
-            
+            imgs = image
             if adv:
                 imgs = self.get_adv_imgs(
                     model, x_natural=image, y=label, adv_mode=args.adv_mode, mode="val"

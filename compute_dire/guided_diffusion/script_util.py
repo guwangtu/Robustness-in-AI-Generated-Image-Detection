@@ -435,7 +435,10 @@ def add_dict_to_argparser(parser, default_dict):
 
 
 def args_to_dict(args, keys):
-    return {k: getattr(args, k) for k in keys}
+    if isinstance(args, dict):
+        return {k: args[k] for k in keys if k in args}
+    else:
+        return {k: getattr(args, k) for k in keys}
 
 
 def str2bool(v):

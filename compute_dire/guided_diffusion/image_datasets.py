@@ -8,7 +8,7 @@ from mpi4py import MPI
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
-from guided_diffusion import logger
+#from guided_diffusion import logger
 
 
 def load_data_for_reverse(
@@ -66,7 +66,7 @@ def load_data_for_reverse(
         random_flip=random_flip,
     )
     yield dataset.__len__() * MPI.COMM_WORLD.size #此处改动方便直接获取全数据的dire图片
-    logger.log("dataset length: {}".format(dataset.__len__() * MPI.COMM_WORLD.size))
+    #logger.log("dataset length: {}".format(dataset.__len__() * MPI.COMM_WORLD.size))
     if deterministic:
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1, drop_last=False)
     else:

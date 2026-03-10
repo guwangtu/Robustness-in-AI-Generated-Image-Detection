@@ -111,9 +111,9 @@ def prepare_dataloader(data_paths,train_transform,val_transform,combine_all=True
         data_paths,
         train_transform,
         val_transform,
-        val_split,
-        ratio_list,
-        concat=combine_all
+        val_split=0.2,
+        ratio_list=None,
+        concat=True
     )
     
     train_loaders=[]

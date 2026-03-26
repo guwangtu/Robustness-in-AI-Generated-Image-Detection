@@ -1,0 +1,2 @@
+accuracy: 7/120=0.0583
+attack success rate: 7/7=1.0000

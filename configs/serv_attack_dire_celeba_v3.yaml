@@ -1,22 +1,18 @@
 # ===== general =====
 todo: attack
 attack_one: False
-attack_version: 1
-shrink_size: 400
-img_save_path: test/celeba_attack_v1
-eot_steps: 1
-cn_loss_weight: 1.0
-dire_loss_weight: -1.0
+attack_version: 3
+shrink_size: 1200
 # ===== device =====
-device: 1
+device: 0
 
 # ===== paths =====
 model_path: compute_dire/models/256x256_diffusion_uncond.pt
-load_path: test/dire/dire_face_celeba_sfhq_n.pt
-dataset_path: E:\datasets\face\celeba
+load_path: /data2/dataset/Robustness/pt/dire/dire_face_all_n.pt
+dataset_path: /data2/dataset/Robustness/face/celeba
 
 # ===== sampling =====
-batch_size: 4
+batch_size: 24
 num_samples: 1000
 timestep_respacing: ddim20
 use_ddim: true

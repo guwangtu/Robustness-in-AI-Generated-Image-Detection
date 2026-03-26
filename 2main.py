@@ -88,6 +88,9 @@ def attack_dire(cfg,device):
             train_transform=train_transform,
             val_transform=train_transform
         )
+        if cfg.get('shrink_size'):
+            shrink_ratio = cfg['shrink_size']/len(val_data)
+            val_data.shrink_dataset(shrink_ratio) # 只测试400张
         t_loader = DataLoader(
                     val_data,
                     batch_size=cfg['batch_size']
@@ -95,10 +98,14 @@ def attack_dire(cfg,device):
         
         allnum=0    
         rightnum=0
+        rightnum_adv=0
         attack_success_num=0
         detector.eval()
 
         for i, (image, label) in tqdm(enumerate(t_loader), total=len(t_loader)):
+            # 跳过最后一回合不足一个 batch 的情况
+            if image.shape[0] != cfg['batch_size']:
+                continue
             image = image.to(device, non_blocking=True)
             label = label.to(device, non_blocking=True)
             adv = pgd_bpda_attack(
@@ -112,10 +119,14 @@ def attack_dire(cfg,device):
                 detector=detector,
                 eps=8/255,
                 alpha=1/255,
-                steps=40,
+                steps=10,
             )
-            dire = compute_dire(image, model, diffusion, cfg)
-            adv_dire = compute_dire(adv, model, diffusion, cfg)
+            dire,_ = compute_dire(image, model, diffusion, cfg)
+            adv_dire,_ = compute_dire(adv, model, diffusion, cfg)
+            save_attack_results(image, adv, dire, adv_dire, save_root=cfg['img_save_path']+'_ce_'+str(cfg['ce_loss_weight'])+'_dire_'+str(cfg['dire_loss_weight']))
+
+
+
             logits = detector(dire)
             adv_logits = detector(adv_dire)
             allnum+=cfg['batch_size']
@@ -123,13 +134,17 @@ def attack_dire(cfg,device):
             adv_pred = torch.argmax(adv_logits, dim=1)
 
             rightnum += (pred == label).sum().item()
-
+            rightnum_adv += (adv_pred == label).sum().item()
             attack_success_num += ((pred == label) & (adv_pred != label)).sum().item()
             #print(f"image {i}: clean label={label.item()}, clean pred={torch.argmax(logits, dim=1).item()}, adv pred={torch.argmax(adv_logits, dim=1).item()}")
             
         print(f"accuracy: {rightnum}/{allnum}={rightnum/allnum:.4f}")
-        print(f"attack success rate: {attack_success_num}/{allnum}={attack_success_num/allnum:.4f}")
-
+        print(f"accuracy after attack: {rightnum_adv}/{allnum}={rightnum_adv/allnum:.4f}")
+        print(f"attack success rate: {attack_success_num}/{rightnum}={attack_success_num/rightnum:.4f}")
+        # save results in txt
+        # with open("attack_results.txt", "w") as f:
+        #     f.write(f"accuracy: {rightnum}/{allnum}={rightnum/allnum:.4f}\n")
+        #     f.write(f"attack success rate: {attack_success_num}/{rightnum}={attack_success_num/rightnum:.4f}\n")
 
 def test_dire(cfg):
 
@@ -183,7 +198,30 @@ def test_dire(cfg):
         if torch.argmax(logits, dim=1) == label:
             rightnum+=1
     print(f"accuracy: {rightnum}/{allnum}={rightnum/allnum:.4f}")
+from torchvision.utils import save_image
+def save_attack_results(image, adv, dire, adv_dire, save_root):
 
+    os.makedirs(save_root, exist_ok=True)
+
+    # 找已有最大编号
+    existing = [
+        int(name) for name in os.listdir(save_root)
+        if name.isdigit() and os.path.isdir(os.path.join(save_root, name))
+    ]
+
+    start_idx = max(existing) + 1 if existing else 1
+
+    B = image.shape[0]
+
+    for i in range(B):
+
+        folder = os.path.join(save_root, str(start_idx + i))
+        os.makedirs(folder, exist_ok=True)
+
+        save_image(image[i].detach().cpu(), os.path.join(folder, "image.png"))
+        save_image(adv[i].detach().cpu(), os.path.join(folder, "adv.png"))
+        save_image(dire[i].detach().cpu(), os.path.join(folder, "dire.png"))
+        save_image(adv_dire[i].detach().cpu(), os.path.join(folder, "adv_dire.png"))
 import matplotlib.pyplot as plt
 
 def show_image_and_adv(image, adv, titles=("Original", "Adversarial")):
@@ -205,6 +243,8 @@ def show_image_and_adv(image, adv, titles=("Original", "Adversarial")):
 
     plt.tight_layout()
     plt.show()
+
+
 
 class BPDA_DIRE(Function):
     @staticmethod
@@ -243,11 +283,9 @@ class BPDA_DIRE(Function):
 class BPDA_DIRE_v2(Function):
     @staticmethod
     def forward(ctx, image, model, diffusion, cfg):
-        # 真实 forward：算真实 dire 和真实 recons
         with torch.no_grad():
             dire, recons = compute_dire(image, model, diffusion, cfg)
 
-        # backward 需要 image 和 recons
         ctx.save_for_backward(image, recons)
         return dire
 
@@ -255,23 +293,21 @@ class BPDA_DIRE_v2(Function):
     def backward(ctx, grad_output):
         image, recons = ctx.saved_tensors
 
-        # 构造新的可导变量
-        image_ = image.detach().requires_grad_(True)
+        with torch.enable_grad():
+            image_ = image.detach().requires_grad_(True)
+            recons_const = recons.detach()
 
-        # stopgrad(recons)：把 recons 视为常量
-        recons_const = recons.detach()
+            eps_smooth = 1e-6
+            dire_tilde = torch.sqrt((image_ - recons_const) ** 2 + eps_smooth)
 
-        # surrogate: |image - stopgrad(recons)|
-        dire_tilde = torch.abs(image_ - recons_const)
-
-        grad_image = torch.autograd.grad(
-            outputs=dire_tilde,
-            inputs=image_,
-            grad_outputs=grad_output,
-            retain_graph=False,
-            create_graph=False,
-            allow_unused=False
-        )[0]
+            grad_image = torch.autograd.grad(
+                outputs=dire_tilde,
+                inputs=image_,
+                grad_outputs=grad_output,
+                retain_graph=False,
+                create_graph=False,
+                allow_unused=False
+            )[0]
 
         return grad_image, None, None, None
 
@@ -290,7 +326,7 @@ def pgd_bpda_attack(
     detector,
     eps=8/255,
     alpha=1/255,
-    steps=40,
+    steps=10,
     targeted=False,
     target_label=None,      # targeted=True 时必填
     random_start=True,
@@ -307,28 +343,42 @@ def pgd_bpda_attack(
     else:
         x = x0.clone()
 
+    eot_steps = cfg.get("eot_steps", 1)
+
     for _ in range(steps):
         x = x.detach().requires_grad_(True)
 
         # diffusion 输入通常是 [-1,1]
         x_in = x * 2 - 1
 
-        dire = compute_dire_bpda(x_in, model, diffusion, cfg)  # 你已有
-        logits = detector(dire)
+
+        loss_total=0
+        for _ in range(eot_steps):
+            dire = compute_dire_bpda(x_in, model, diffusion, cfg)
+            logits = detector(dire)
+
+            if targeted:
+                assert target_label is not None
+                ce_loss = F.cross_entropy(logits, target_label)
+                dire_scalar = dire.mean(dim=(1,2,3))
+                sign = 1 - 2 * true_label.float()
+                dire_loss = (dire_scalar * sign).mean()
+                a=cfg['ce_loss_weight']
+                b=cfg['dire_loss_weight']
+                loss_total = loss_total + a*ce_loss + b*dire_loss 
+
+            else:
+                loss_total = loss_total + F.cross_entropy(logits, true_label)
+
+        loss = loss_total / eot_steps
+        grad = torch.autograd.grad(loss, x)[0]
 
         if targeted:
-            assert target_label is not None
-            loss = torch.nn.CrossEntropyLoss()(logits, target_label)
-            # targeted: 最小化目标标签 loss
-            grad = torch.autograd.grad(loss, x)[0]
             x = x - alpha * grad.sign()
         else:
-            loss = torch.nn.CrossEntropyLoss()(logits, true_label)
-            # untargeted: 最大化真实标签 loss
-            grad = torch.autograd.grad(loss, x)[0]
             x = x + alpha * grad.sign()
 
-        # 投影到 eps-ball
+        # project to linf ball
         x = torch.max(torch.min(x, x0 + eps), x0 - eps)
         x = x.clamp(0, 1)
 
@@ -386,10 +436,14 @@ def main():
     with open(args.config, "r") as f:
         cfg = yaml.safe_load(f)
     if cfg["todo"] == "attack":
+        print("Running attack_dire...")
         attack_dire(cfg,device)
+
     elif cfg["todo"] == "test_dire":
+        print("Running test_dire...")
         test_dire(cfg)
     elif cfg["todo"] == "test":
+        print("Running test...")
         test(cfg)
 
 if __name__ == "__main__":

@@ -1,19 +1,17 @@
 # ===== general =====
 todo: attack
 attack_one: False
-attack_version: 1
-shrink_size: 400
-img_save_path: test/celeba_attack_v1
-eot_steps: 1
-cn_loss_weight: 1.0
-dire_loss_weight: -1.0
+attack_version: 2
+shrink_size: 120
+img_save_path: test/sdface_attack_v2
+
 # ===== device =====
 device: 1
 
 # ===== paths =====
 model_path: compute_dire/models/256x256_diffusion_uncond.pt
 load_path: test/dire/dire_face_celeba_sfhq_n.pt
-dataset_path: E:\datasets\face\celeba
+dataset_path: E:\datasets\face\sdface
 
 # ===== sampling =====
 batch_size: 4

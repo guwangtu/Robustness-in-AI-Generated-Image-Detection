@@ -117,12 +117,12 @@ def attack_dire(cfg,device):
                 diffusion=diffusion,
                 cfg=cfg,
                 detector=detector,
-                eps=8/255,
-                alpha=1/255,
-                steps=10,
+                eps=cfg.get('atk_eps', 8/255),
+                alpha=cfg.get('atk_alpha', 1/255),
+                steps=cfg.get('atk_steps', 10),
             )
-            dire,_ = compute_dire(image, model, diffusion, cfg)
-            adv_dire,_ = compute_dire(adv, model, diffusion, cfg)
+            dire,_ = compute_dire(image*2-1, model, diffusion, cfg)
+            adv_dire,_ = compute_dire(adv*2-1, model, diffusion, cfg)
             save_attack_results(image, adv, dire, adv_dire, save_root=cfg['img_save_path']+'_ce_'+str(cfg['ce_loss_weight'])+'_dire_'+str(cfg['dire_loss_weight']))
 
 

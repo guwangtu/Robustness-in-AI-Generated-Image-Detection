@@ -39,6 +39,9 @@ use_fp16: true
 use_scale_shift_norm: true
 
 # ===== attack flags =====
-atk_eps: 0.03137 
-atk_alpha: 0.00784
+# atk_eps: 0.03137 
+# atk_alpha: 0.00784
+# atk_steps: 10
+atk_eps: 0.01 
+atk_alpha: 0.003
 atk_steps: 10

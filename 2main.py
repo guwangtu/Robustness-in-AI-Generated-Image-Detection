@@ -43,161 +43,78 @@ def attack_dire(cfg,device):
         m_state_dict = torch.load(load_path, map_location="cpu")
         detector.load_state_dict(m_state_dict)
     detector = detector.to(device, non_blocking=True).eval()
-    if cfg.get('attack_one'):
-        image = Image.open("test\\91.png").convert("RGB")
-        image = transforms.ToTensor()(image).unsqueeze(0)
-        image= transforms.Resize((256,256))(image)
-        image = image.clone().detach().to(device).requires_grad_(True)
-        true_y = torch.tensor([1], device=device)    # 假设原图是 fake
-        target_y = torch.tensor([0], device=device)  # 目标是 real
 
-        adv01 = pgd_bpda_attack(
-            image=image,
-            true_label=true_y,
-            target_label=target_y,
-            targeted=True,
-            model=model,
-            diffusion=diffusion,
-            cfg=cfg,
-            detector=detector,
-            eps=8/255,
-            alpha=1/255,
-            steps=40,
-        )
-
-        # 对比攻击前后预测
-        with torch.no_grad():
-            logits_clean = detector(compute_dire_bpda(image*2-1, model, diffusion, cfg))
-            logits_adv   = detector(compute_dire_bpda(adv01*2-1, model, diffusion, cfg))
-        print("clean logits:", logits_clean)
-        print("adv logits  :", logits_adv)
-        print("clean probs:", torch.softmax(logits_clean, dim=1))
-        print("adv probs  :", torch.softmax(logits_adv, dim=1))
-
-        show_image_and_adv(image, adv01, titles=("Original", "Adversarial"))  
-    else:
-        from scripts.load_data import load_fold
-        train_transform = transforms.Compose(
-            [
-                transforms.Resize([256, 256]),
-                transforms.ToTensor(),
-            ]
-        )
-        train_data, val_data = load_fold(
-            cfg['dataset_path'],
-            train_transform=train_transform,
-            val_transform=train_transform
-        )
-        if cfg.get('shrink_size'):
-            shrink_ratio = cfg['shrink_size']/len(val_data)
-            val_data.shrink_dataset(shrink_ratio) # 只测试400张
-        t_loader = DataLoader(
-                    val_data,
-                    batch_size=cfg['batch_size']
-                )
-        
-        allnum=0    
-        rightnum=0
-        rightnum_adv=0
-        attack_success_num=0
-        detector.eval()
-
-        for i, (image, label) in tqdm(enumerate(t_loader), total=len(t_loader)):
-            # 跳过最后一回合不足一个 batch 的情况
-            if image.shape[0] != cfg['batch_size']:
-                continue
-            image = image.to(device, non_blocking=True)
-            label = label.to(device, non_blocking=True)
-            adv = pgd_bpda_attack(
-                image=image,
-                true_label=label,
-                target_label=1-label,
-                targeted=True,
-                model=model,
-                diffusion=diffusion,
-                cfg=cfg,
-                detector=detector,
-                eps=cfg.get('atk_eps', 8/255),
-                alpha=cfg.get('atk_alpha', 1/255),
-                steps=cfg.get('atk_steps', 10),
-            )
-            dire,_ = compute_dire(image*2-1, model, diffusion, cfg)
-            adv_dire,_ = compute_dire(adv*2-1, model, diffusion, cfg)
-            save_attack_results(image, adv, dire, adv_dire, save_root=cfg['img_save_path']+'_ce_'+str(cfg['ce_loss_weight'])+'_dire_'+str(cfg['dire_loss_weight']))
-
-
-
-            logits = detector(dire)
-            adv_logits = detector(adv_dire)
-            allnum+=cfg['batch_size']
-            pred = torch.argmax(logits, dim=1)
-            adv_pred = torch.argmax(adv_logits, dim=1)
-
-            rightnum += (pred == label).sum().item()
-            rightnum_adv += (adv_pred == label).sum().item()
-            attack_success_num += ((pred == label) & (adv_pred != label)).sum().item()
-            #print(f"image {i}: clean label={label.item()}, clean pred={torch.argmax(logits, dim=1).item()}, adv pred={torch.argmax(adv_logits, dim=1).item()}")
-            
-        print(f"accuracy: {rightnum}/{allnum}={rightnum/allnum:.4f}")
-        print(f"accuracy after attack: {rightnum_adv}/{allnum}={rightnum_adv/allnum:.4f}")
-        print(f"attack success rate: {attack_success_num}/{rightnum}={attack_success_num/rightnum:.4f}")
-        # save results in txt
-        # with open("attack_results.txt", "w") as f:
-        #     f.write(f"accuracy: {rightnum}/{allnum}={rightnum/allnum:.4f}\n")
-        #     f.write(f"attack success rate: {attack_success_num}/{rightnum}={attack_success_num/rightnum:.4f}\n")
-
-def test_dire(cfg):
-
-    defaults=model_and_diffusion_defaults()
-    defaults.update(cfg)
-    model, diffusion = create_model_and_diffusion(**args_to_dict(defaults, model_and_diffusion_defaults().keys()))
-    model.load_state_dict(dist_util.load_state_dict(defaults['model_path'], map_location="cpu"))
-    if defaults['use_fp16']:
-        model.convert_to_fp16()
-    model.to("cuda"if torch.cuda.is_available() else "cpu")
- 
-
-    detector = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
-    detector.fc = torch.nn.Linear(2048, 2)
-    if cfg['load_path'] is not None:
-        load_path =cfg['load_path']
-        m_state_dict = torch.load(load_path, map_location="cpu")
-        detector.load_state_dict(m_state_dict)
-    detector = detector.to("cuda", non_blocking=True)
-
-    print(detector(dire).shape,dire.shape,detector(dire)) # y: shape[1,2]
-
+    from scripts.load_data import load_fold
     train_transform = transforms.Compose(
         [
             transforms.Resize([256, 256]),
             transforms.ToTensor(),
         ]
     )
-    from scripts.load_data import load_fold
     train_data, val_data = load_fold(
-        "E:\\datasets\\face\\celeba",
+        cfg['dataset_path'],
         train_transform=train_transform,
         val_transform=train_transform
     )
-    val_data.shrink_dataset(0.01) # 只测试400张
+    if cfg.get('shrink_size'):
+        shrink_ratio = cfg['shrink_size']/len(val_data)
+        val_data.shrink_dataset(shrink_ratio) # 只测试400张
     t_loader = DataLoader(
                 val_data,
-                batch_size=1
+                batch_size=cfg['batch_size']
             )
     
     allnum=0    
     rightnum=0
+    rightnum_adv=0
+    attack_success_num=0
     detector.eval()
 
     for i, (image, label) in tqdm(enumerate(t_loader), total=len(t_loader)):
-        image = image.to("cuda", non_blocking=True)
-        label = label.to("cuda", non_blocking=True)
-        dire = compute_dire(image, model, diffusion, cfg)
+        # 跳过最后一回合不足一个 batch 的情况
+        if image.shape[0] != cfg['batch_size']:
+            continue
+        image = image.to(device, non_blocking=True)
+        label = label.to(device, non_blocking=True)
+        adv = pgd_bpda_attack(
+            image=image,
+            true_label=label,
+            target_label=1-label,
+            targeted=True,
+            model=model,
+            diffusion=diffusion,
+            cfg=cfg,
+            detector=detector,
+            eps=cfg.get('atk_eps', 8/255),
+            alpha=cfg.get('atk_alpha', 1/255),
+            steps=cfg.get('atk_steps', 10),
+        )
+        dire,_ = compute_dire(image*2-1, model, diffusion, cfg)
+        adv_dire,_ = compute_dire(adv*2-1, model, diffusion, cfg)
+        save_attack_results(image, adv, dire, adv_dire, save_root=cfg['img_save_path']+'_ce_'+str(cfg['ce_loss_weight'])+'_dire_'+str(cfg['dire_loss_weight']))
+
+
+
         logits = detector(dire)
-        allnum+=1
-        if torch.argmax(logits, dim=1) == label:
-            rightnum+=1
-    print(f"accuracy: {rightnum}/{allnum}={rightnum/allnum:.4f}")
+        adv_logits = detector(adv_dire)
+        allnum+=cfg['batch_size']
+        pred = torch.argmax(logits, dim=1)
+        adv_pred = torch.argmax(adv_logits, dim=1)
+
+        rightnum += (pred == label).sum().item()
+        rightnum_adv += (adv_pred == label).sum().item()
+        attack_success_num += ((pred == label) & (adv_pred != label)).sum().item()
+        #print(f"image {i}: clean label={label.item()}, clean pred={torch.argmax(logits, dim=1).item()}, adv pred={torch.argmax(adv_logits, dim=1).item()}")
+        
+    if allnum > 0:
+        print(f"accuracy: {rightnum}/{allnum}={rightnum/allnum:.4f}")
+        print(f"accuracy after attack: {rightnum_adv}/{allnum}={rightnum_adv/allnum:.4f}")
+        if rightnum > 0:
+            print(f"attack success rate: {attack_success_num}/{rightnum}={attack_success_num/rightnum:.4f}")
+        else:
+            print("attack success rate: N/A (no correctly classified samples)")
+    else:
+        print("No complete batches were processed.")
 from torchvision.utils import save_image
 def save_attack_results(image, adv, dire, adv_dire, save_root):
 
@@ -385,48 +302,6 @@ def pgd_bpda_attack(
     return x.detach()
 
 
-def test(cfg):
-     
-
-    detector = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
-    detector.fc = torch.nn.Linear(2048, 2)
-    if cfg['load_path'] is not None:
-        load_path =cfg['load_path']
-        m_state_dict = torch.load(load_path, map_location="cpu")
-        detector.load_state_dict(m_state_dict)
-    detector = detector.to("cuda", non_blocking=True)
-
-    train_transform = transforms.Compose(
-        [
-            transforms.Resize([256, 256]),
-            transforms.ToTensor(),
-        ]
-    )
-    from scripts.load_data import load_image_fold
-    train_data, val_data = load_image_fold(
-        "E:\\datasets\\face\\celeba",
-        0,
-        train_transform,
-        0.002
-    )
-    t_loader = DataLoader(
-                val_data,
-                batch_size=1
-            )
-    
-    allnum=0    
-    rightnum=0
-    detector.eval()
-
-    for i, (image, label) in tqdm(enumerate(t_loader), total=len(t_loader)):
-        image = image.to("cuda", non_blocking=True)
-        label = label.to("cuda", non_blocking=True) 
-        logits = detector(image)
-        allnum+=1
-        if torch.argmax(logits, dim=1) == label:
-            rightnum+=1
-    print(f"accuracy: {rightnum}/{allnum}={rightnum/allnum:.4f}")
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
@@ -439,12 +314,6 @@ def main():
         print("Running attack_dire...")
         attack_dire(cfg,device)
 
-    elif cfg["todo"] == "test_dire":
-        print("Running test_dire...")
-        test_dire(cfg)
-    elif cfg["todo"] == "test":
-        print("Running test...")
-        test(cfg)
 
 if __name__ == "__main__":
     main()

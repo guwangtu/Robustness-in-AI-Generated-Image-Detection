@@ -65,7 +65,7 @@ def main():
 
 def compute_dire(imgs, model, diffusion,cfg):
 
-    imgs = imgs.to(dist_util.dev())
+    # imgs already on the correct device from caller
     model_kwargs = {}
     reverse_fn = diffusion.ddim_reverse_sample_loop
     

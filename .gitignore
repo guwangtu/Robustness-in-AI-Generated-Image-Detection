@@ -4,3 +4,4 @@ scripts/__pycache__
 *.ipynb
 test/
 compute_dire/models
+.claude

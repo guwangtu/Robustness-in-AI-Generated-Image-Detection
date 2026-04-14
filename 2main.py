@@ -326,16 +326,30 @@ def adv_train_dire(cfg, device):
     detector = detector.to(device, non_blocking=True)
 
     # ===== 数据集 =====
-    from scripts.load_data import load_fold
+    from scripts.load_data import load_fold, ConcatDataset
     train_transform = transforms.Compose([
         transforms.Resize([256, 256]),
         transforms.ToTensor(),
     ])
-    train_data, val_data = load_fold(
-        cfg['dataset_path'],
-        train_transform=train_transform,
-        val_transform=train_transform,
-    )
+
+    # 支持 dataset_paths (列表) 或 dataset_path (单个)，多个数据集自动合并
+    dataset_paths = cfg.get('dataset_paths', None)
+    if dataset_paths is None:
+        dataset_paths = [cfg['dataset_path']]
+    if isinstance(dataset_paths, str):
+        dataset_paths = [dataset_paths]
+
+    train_datasets = []
+    val_datasets = []
+    for p in dataset_paths:
+        t, v = load_fold(p, train_transform=train_transform, val_transform=train_transform)
+        train_datasets.append(t)
+        val_datasets.append(v)
+        print(f"  loaded {p}: train={len(t)}, val={len(v)}")
+
+    train_data = ConcatDataset(train_datasets) if len(train_datasets) > 1 else train_datasets[0]
+    val_data = ConcatDataset(val_datasets) if len(val_datasets) > 1 else val_datasets[0]
+    print(f"Total: train={len(train_data)}, val={len(val_data)}")
 
     # epoch_sample_size: 每个 epoch 随机采样的图片数量，None 或 0 表示使用全量
     epoch_sample_size = cfg.get('epoch_sample_size', None)

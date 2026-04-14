@@ -4,7 +4,10 @@ todo: adv_train
 # ===== paths =====
 model_path: compute_dire/models/256x256_diffusion_uncond.pt
 load_path: test/dire_face_all_n.pt      # 预训练 detector 权重，null 则从头训练
-dataset_path: test/testdataset
+# dataset_paths 支持单个或多个数据集路径，多个会自动合并
+dataset_paths:
+  - E:\datasets\face\celeba
+  - E:\datasets\face\sfhq
 save_path: checkpoint/adv_train_bpda
 
 # ===== sampling =====

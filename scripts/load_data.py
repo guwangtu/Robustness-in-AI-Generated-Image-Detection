@@ -243,7 +243,7 @@ def spilt_dataset(dataset, validation_split=0.2):  #  共用transform
     train_dataset = MyDataset(image_paths, labels, transform=dataset.transform)
 
     image_paths = [dataset.image_paths[idx] for idx in val_indices]
-    labels = [dataset.labels[idx] for idx in train_indices]
+    labels = [dataset.labels[idx] for idx in val_indices]
     val_dataset = MyDataset(image_paths, labels, transform=dataset.transform)
 
     return train_dataset, val_dataset

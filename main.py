@@ -111,8 +111,8 @@ def prepare_dataloader(data_paths,train_transform,val_transform,combine_all=True
         data_paths,
         train_transform,
         val_transform,
-        val_split=0.2,
-        ratio_list=None,
+        validation_split=val_split,
+        ratio_list=ratio_list,
         concat=True
     )
     
@@ -173,7 +173,7 @@ def run_test(args,trainer,model):
     _,val_loader=prepare_dataloader(args.data_paths,val_transform,val_transform,combine_all=True,args=args)
 
     trainer.set_dataloader(val_loader=val_loader[0])
-    trainer.evaluate(model, adv_test=args.adv or args.adv)
+    trainer.evaluate(model, adv_test=args.adv or args.adv_test)
     if args.not_combine:
         _,val_loaders=prepare_dataloader(args.data_paths,val_transform,val_transform,combine_all=False,args=args)
         for i in range(len(args.data_paths)):

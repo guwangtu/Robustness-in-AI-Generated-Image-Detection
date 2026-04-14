@@ -207,8 +207,10 @@ def load_fold(path, *args, **kwargs):  # 0真1假
         val_transform = kwargs.get("transform", None)
         
     if not os.path.exists(test_path) and not os.path.exists(train_path):
-        val_dataset = load_single_dataset(path, val_transform)
-        train_path = MyDataset([],[])
+        full_dataset = load_single_dataset(path, train_transform)
+        validation_split = kwargs.get("validation_split", 0.2)
+        train_dataset, val_dataset = spilt_dataset(full_dataset, validation_split)
+        val_dataset.transform = val_transform
     else:
         train_dataset = load_single_dataset(train_path, train_transform)
         val_dataset = load_single_dataset(test_path, val_transform)

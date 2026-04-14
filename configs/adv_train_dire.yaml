@@ -1,0 +1,48 @@
+# ===== general =====
+todo: adv_train
+
+# ===== paths =====
+model_path: compute_dire/models/256x256_diffusion_uncond.pt
+load_path: test/dire_face_all_n.pt      # 预训练 detector 权重，null 则从头训练
+dataset_path: test/testdataset
+save_path: checkpoint/adv_train_bpda
+
+# ===== sampling =====
+batch_size: 4
+dire_batch_size: 1
+num_samples: 1000
+timestep_respacing: ddim20
+use_ddim: true
+
+# ===== ddim model flags =====
+attention_resolutions: "32,16,8"
+class_cond: false
+clip_denoised: true
+diffusion_steps: 1000
+dropout: 0.1
+image_size: 256
+learn_sigma: true
+noise_schedule: linear
+num_channels: 256
+num_head_channels: 64
+num_res_blocks: 2
+real_step: 0
+resblock_updown: true
+use_fp16: true
+use_scale_shift_norm: true
+
+# ===== training flags =====
+epochs: 20
+lr: 0.0001
+adv_ratio: 0.5           # adv loss 权重，clean loss 权重为 1 - adv_ratio
+epoch_sample_size: 2000   # 每个 epoch 从训练集随机采样的图片数量，null 则全量
+val_sample_size: 40      # 每个 epoch 验证集采样数量，null 则全量
+
+# ===== attack flags (BPDA PGD) =====
+atk_eps: 0.03137         # 8/255
+atk_alpha: 0.00784       # 2/255
+atk_steps: 10
+ce_loss_weight: 1.0
+dire_loss_weight: 0.0
+attack_version: 1         # 1=STE, 2=DIRE差值近似
+eot_steps: 1

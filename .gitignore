@@ -5,3 +5,4 @@ scripts/__pycache__
 test/
 compute_dire/models
 .claude
+checkpoint/

@@ -3,6 +3,16 @@ import os
 import subprocess
 import yaml
 import sys
+
+# === 单进程跑时屏蔽真实 mpi4py，换成本地 stub（避免缺 libmpi.so 报错） ===
+_stub_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mpi4py_stub")
+if os.path.isdir(_stub_path):
+    sys.path.insert(0, _stub_path)
+    # 如果真 mpi4py 已经被加载过，强制移除，让 stub 生效
+    for _m in list(sys.modules):
+        if _m == "mpi4py" or _m.startswith("mpi4py."):
+            del sys.modules[_m]
+
 from tqdm import tqdm
 from scripts.attack_dire import compute_dire
 

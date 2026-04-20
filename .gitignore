@@ -6,3 +6,5 @@ test/
 compute_dire/models
 .claude
 checkpoint/
+*.tex
+*.log

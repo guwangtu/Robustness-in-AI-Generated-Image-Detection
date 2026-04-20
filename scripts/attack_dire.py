@@ -92,7 +92,7 @@ def compute_dire(imgs, model, diffusion,cfg):
         real_step=cfg['real_step'],
     )
 
-    dire = th.abs(imgs - recons)
+    dire = th.abs(imgs - recons)/2
     return dire,recons
 
 
